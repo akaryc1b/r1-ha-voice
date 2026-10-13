@@ -9,11 +9,11 @@ from urllib.parse import urlsplit
 
 DEFAULTS = {
     "asr_base_url": "https://api.siliconflow.cn/v1",
-    "asr_model": "FunAudioLLM/SenseVoiceSmall",
+    "asr_model": "TeleAI/TeleSpeechASR",
     "asr_api_key": "",
     "asr_timeout_seconds": 4,
-    "asr_fallback_model": "TeleAI/TeleSpeechASR",
-    "asr_fallback_timeout_seconds": 4,
+    "asr_fallback_model": "FunAudioLLM/SenseVoiceSmall",
+    "asr_fallback_timeout_seconds": 2,
     "local_first": False,
     "local_max_chars": 12,
     "local_asr_url": "http://127.0.0.1:16066",

@@ -27,3 +27,9 @@ python tests/ai_stream/run_route_volume_tests.py
     python tests/ai_stream/run_asr_retry_tests.py --java-home "JDK路径"
 
 12项隔离生命周期测试检查真实完成事件门控、一次续听预算、新唤醒/轮次取消、其他播报隔离、错误退出、绝对超时、重复回调与旧清理回调。另16项测试直接提取当前R1文本归一化方法，确认“放点音乐/随机播放点音乐”等保留原意，仅纠正重复播放动词与既有上下首同音短句。该测试不联网、不采集录音、不控制设备；现场提示完成与继续收音仍需在安装后验证。
+
+收音临时静音测试：
+
+    python tests/ai_stream/run_listen_mute_tests.py --java-home "JDK路径"
+
+12项隔离测试检查API22静音请求配对、原有静音保持、重复释放、重叠会话、零音量、收音中用户调音、申请/释放异常与原Binder持有者。实现不写音乐或播报音量索引；仅真实voice会话启用，网页listen_music_mute开关默认开启。当前R1的独立探针已确认音乐静音计数0→1→0、原音量索引保持、播报stream2不受影响；该证据不等同于现场ASR准确率测试。

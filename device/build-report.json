@@ -1,10 +1,10 @@
 {
   "source_sha256": "6cd76aea5b050fafe2e31cde93f533eb9476f8b07d0b5be7d47703af55a982ce",
-  "apk_sha256": "105942ceb9d625bd25a9b458fff13cd4e387bd9008e47e4d50de08d410017541",
-  "prefix_bytes": 8280120,
-  "central_offset": 33205415,
-  "apk_bytes": 33216507,
-  "method_ids": 54678,
+  "apk_sha256": "9084c13b67b64f76350a806cd064d540db4f4b879a03cc87f8d9ce290a1cc3cd",
+  "prefix_bytes": 8306232,
+  "central_offset": 33231527,
+  "apk_bytes": 33242619,
+  "method_ids": 54708,
   "old_zip_offset": 8128580,
   "classes_added": [
     "r1.local.asr.LocalAsr"

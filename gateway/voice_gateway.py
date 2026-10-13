@@ -4,6 +4,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 import aiohttp
 from gateway_config import GatewayConfig,ASR_PRESETS,model_id
+from event_log import EventLog,encode_json,MAX_HTTP_BYTES
 from aiohttp import web,WSMsgType
 import numpy as np
 ROOT=Path(__file__).resolve().parent
@@ -12,6 +13,17 @@ LOG=logging.getLogger('r1-cloud-voice')
 CACHE={}
 MUSIC_COMMANDS=json.loads((ROOT/'music-commands.json').read_text(encoding='utf-8'))
 ASR_RETRY_MESSAGE='没有听清，请再说一遍。'
+ASR_UNAVAILABLE_MESSAGE='语音识别服务暂时没有响应，请稍后再试。'
+
+def log_event(app,level,stage,turn=0,**fields):
+    history=app.get('event_log')
+    if history is not None:history.record(level,stage,turn,**fields)
+
+def request_turn(request):
+    try:
+        turn=int(request.query.get('turn','0'))
+        return turn if 0<=turn<2**63 else 0
+    except (ValueError,TypeError):return 0
 
 class CloudAsrUnavailable(Exception):
     """云端没有确认识别结果，禁止回退执行本地猜测。"""
@@ -26,7 +38,7 @@ class CloudAsrRejected(RuntimeError):
         self.kind=kind
         self.status=status
 
-async def transcribe_cloud(session,audio,primary=None,settings=None):
+async def transcribe_cloud(session,audio,primary=None,settings=None,events=None):
     """按当前配置选择模型与超时；所有云端尝试失败后要求重说。"""
     config=settings or SETTINGS.snapshot()
     primary=model_id(primary or config['asr_model'])
@@ -58,12 +70,17 @@ async def transcribe_cloud(session,audio,primary=None,settings=None):
                 'invalid_response' if isinstance(exc,(ValueError,TypeError,AttributeError,aiohttp.ContentTypeError)) else
                 'transport' if isinstance(exc,aiohttp.ClientError) else 'runtime')
             failure_kinds.append(kind)
+            if events:events('WARN',model=model,error_kind=kind,status=getattr(exc,'status',0),
+                duration_ms=round((time.monotonic()-started)*1000),audio_seconds=len(audio)/32000,
+                response='attempt_failed budget_seconds='+str(budget),backend='cloud')
             LOG.warning('ASR model=%s failed=%s kind=%s status=%d elapsed_ms=%d',
                 model,type(exc).__name__,kind,getattr(exc,'status',0),
                 round((time.monotonic()-started)*1000))
-    raise CloudAsrUnavailable(bool(failure_kinds) and all(kind=='empty_text' for kind in failure_kinds))
+    # 至少一个服务正常返回空文字时允许重说；备用服务故障不能阻止这次续听。
+    raise CloudAsrUnavailable('empty_text' in failure_kinds)
 
 async def startup(app):
+    app['event_log']=await EventLog(app.get('event_log_dir',ROOT/'diagnostic-logs')).start()
     app['music_jobs']=asyncio.Queue(maxsize=4)
     app['music_generation']=0
     app['music_interrupt']=asyncio.Event()
@@ -85,14 +102,15 @@ async def cleanup(app):
     try:
         await asyncio.gather(app['music_worker'],*tasks,return_exceptions=True)
     finally:
-        await app['http'].close()
+        try:await app['http'].close()
+        finally:await app['event_log'].close()
 @web.middleware
 async def local_only(request,handler):
     if request.remote not in SETTINGS.snapshot()['allowed_clients']:
         raise web.HTTPForbidden()
-    if request.method=='POST' and request.path in {'/config','/asr/test'}:
+    if request.method=='POST' and request.path in {'/config','/asr/test','/logs/config','/logs/clear','/logs/events'}:
         origin=request.headers.get('Origin')
-        if origin and urlsplit(origin).netloc!=request.host:
+        if origin and (urlsplit(origin).netloc!=request.host or urlsplit(origin).scheme!=request.scheme):
             raise web.HTTPForbidden()
     return await handler(request)
 def normalize_command(text):
@@ -175,6 +193,8 @@ async def recognize(request):
     await ws.prepare(request)
     chunks=[];size=0;last_local='';finished=False
     session=request.app['http']
+    turn=request_turn(request)
+    events=lambda level,**fields:log_event(request.app,level,'ASR',turn,**fields)
     try:
         async with session.ws_connect(config['local_asr_url'],timeout=2,max_msg_size=1024*1024) as local:
             async def upload_audio():
@@ -199,21 +219,30 @@ async def recognize(request):
                     backend='local-fast';text=local_candidate
                 else:
                     try:
-                        text,backend=await transcribe_cloud(session,wav_bytes(chunks),primary,config)
+                        text,backend=await transcribe_cloud(session,wav_bytes(chunks),primary,config,events)
                     except CloudAsrUnavailable as error:
                         LOG.warning('ASR retry_required reason=cloud_unavailable')
+                        events('WARN' if error.retryable else 'ERROR',model=primary,backend='cloud',
+                            error_kind='empty_text' if error.retryable else 'cloud_unavailable',
+                            duration_ms=round((time.monotonic()-started)*1000),audio_seconds=size/64000)
                         if not ws.closed:
-                            await ws.send_json({'text':'','is_final':True,'error':ASR_RETRY_MESSAGE,'retryable':error.retryable})
+                            await ws.send_json({'text':'','is_final':True,'error':ASR_RETRY_MESSAGE if error.retryable else ASR_UNAVAILABLE_MESSAGE,'retryable':error.retryable})
                             await ws.send_str('Done!')
                         return
                 if is_incomplete_transcription(text):
                     LOG.info('ASR retry_required reason=incomplete_transcription')
+                    events('WARN',text=text,model=primary,backend=backend,error_kind='incomplete_transcription',
+                        duration_ms=round((time.monotonic()-started)*1000),audio_seconds=size/64000)
                     if not ws.closed:
                         await ws.send_json({'text':'','is_final':True,'error':ASR_RETRY_MESSAGE,'retryable':True})
                         await ws.send_str('Done!')
                     return
                 text=normalize_command(text)
                 LOG.info('ASR backend=%s seconds=%.3f audio_seconds=%.2f text=%s',backend,time.monotonic()-started,size/64000,text)
+                actual_model={'telespeech':'TeleAI/TeleSpeechASR','sensevoice':'FunAudioLLM/SenseVoiceSmall',
+                    'xingchen-gsr':'XingChenAGI/XingChenGSR-V1.0','local-fast':'local'}.get(backend,backend.removeprefix('cloud:'))
+                events('INFO',text=text,model=actual_model,backend=backend,status='final',
+                    duration_ms=round((time.monotonic()-started)*1000),audio_seconds=size/64000)
                 if not ws.closed:
                     await ws.send_json({'text':text,'is_final':True,'backend':backend})
                     await ws.send_str('Done!')
@@ -240,8 +269,9 @@ async def recognize(request):
                 await asyncio.gather(sending,return_exceptions=True)
     except (aiohttp.ClientError,asyncio.TimeoutError) as exc:
         LOG.warning('ASR session ended cause=%s',type(exc).__name__)
+        events('ERROR',model=primary,backend='local_endpoint',error_kind='timeout' if isinstance(exc,asyncio.TimeoutError) else 'transport')
         if not ws.closed:
-            await ws.send_json({'text':'','is_final':True,'error':ASR_RETRY_MESSAGE,'retryable':False})
+            await ws.send_json({'text':'','is_final':True,'error':ASR_UNAVAILABLE_MESSAGE,'retryable':False})
             await ws.send_str('Done!')
     finally:await ws.close()
     return ws
@@ -300,10 +330,18 @@ async def music_worker(app):
             if generation!=app['music_generation']:return
             app['music_last_error']=''
             LOG.info('MUSIC_DIRECT operation=%s seconds=%.3f',operation,time.monotonic()-started)
+            log_event(app,'INFO','MA',turn,operation=operation,status='completed',executed=True,
+                duration_ms=round((time.monotonic()-started)*1000))
+        except asyncio.CancelledError:
+            log_event(app,'INFO','MA',turn,operation=operation,status='preempted',executed=False,
+                duration_ms=round((time.monotonic()-started)*1000))
+            raise
         except (aiohttp.ClientError,asyncio.TimeoutError,RuntimeError,ValueError,TypeError) as error:
             if generation!=app['music_generation']:return
             app['music_last_error']='音乐指令未能完成，请稍后再试。'
             LOG.warning('MUSIC_DIRECT failed=%s',type(error).__name__)
+            log_event(app,'ERROR','MA',turn,operation=operation,status='failed',error_kind=type(error).__name__,
+                duration_ms=round((time.monotonic()-started)*1000))
             if turn:
                 try:
                     async with app['http'].get(SETTINGS.snapshot()['r1_control_url']+'/voice_test',
@@ -311,10 +349,11 @@ async def music_worker(app):
                             timeout=aiohttp.ClientTimeout(total=3)) as response:
                         await response.read()
                 except (aiohttp.ClientError,asyncio.TimeoutError):pass
-    def job_done(task,generation):
+    def job_done(task,generation,operation,turn):
         app['music_tasks'].discard(task)
         if not task.cancelled() and (error:=task.exception()) is not None:
             LOG.warning('MUSIC_DIRECT task failed=%s',type(error).__name__)
+            log_event(app,'ERROR','MA',turn,operation=operation,status='failed',error_kind=type(error).__name__)
             if generation==app['music_generation']:
                 app['music_last_error']='音乐指令未能完成，请稍后再试。'
     while True:
@@ -325,7 +364,7 @@ async def music_worker(app):
             app['music_interrupt'].clear()
             task=asyncio.create_task(run_job(operation,turn,generation))
             app['music_tasks'].add(task)
-            task.add_done_callback(lambda done,g=generation:job_done(done,g))
+            task.add_done_callback(lambda done,g=generation,op=operation,t=turn:job_done(done,g,op,t))
             app['music_active_task']=task
             interrupted=asyncio.create_task(app['music_interrupt'].wait())
             await asyncio.wait({task,interrupted},return_when=asyncio.FIRST_COMPLETED)
@@ -345,7 +384,9 @@ async def music_control(request):
         text=normalize_command(str(data.get('text','')).strip()).strip('，。！？、,.!? ')
         if len(text)>160:raise ValueError('Command too long')
         operation=match_music_operation(text)
-        if operation is None:return web.json_response({'handled':False})
+        if operation is None:
+            log_event(request.app,'DEBUG','ROUTE',text=text,route='fallback',accepted=False)
+            return web.json_response({'handled':False})
         if data.get('dry_run') is True:return web.json_response({'handled':True,'operation':operation,'executed':False})
         turn=int(data.get('turn') or 0)
         if request.app['music_stopping']:
@@ -363,15 +404,19 @@ async def music_control(request):
             request.app['music_generation']+=1
             generation=request.app['music_generation']
             while not jobs.empty():
-                jobs.get_nowait();jobs.task_done()
+                old_operation,old_turn,_=jobs.get_nowait();jobs.task_done()
+                log_event(request.app,'INFO','MA',old_turn,operation=old_operation,status='preempted',executed=False)
             for task in tuple(request.app['music_tasks']):task.cancel()
             request.app['music_interrupt'].set()
         if jobs.full():return web.json_response({'handled':True,'accepted':False,'message':'音乐指令较多，请稍等片刻。'})
         jobs.put_nowait((operation,turn,generation))
+        log_event(request.app,'INFO','ROUTE',turn,text=text,route='direct',operation=operation,accepted=True,executed=False)
+        log_event(request.app,'INFO','MA',turn,operation=operation,status='accepted',accepted=True,executed=False)
         messages={'pause':'正在暂停。','stop':'正在停止。','resume':'正在继续播放。','random':'正在随机播放音乐。','first':'正在播放第一首。','next':'正在切换下一首。','previous':'正在切换上一首。'}
         return web.json_response({'handled':True,'accepted':True,'message':messages[operation],'operation':operation})
     except (aiohttp.ClientError,asyncio.TimeoutError,RuntimeError,ValueError,TypeError) as error:
         LOG.warning('MUSIC_DIRECT failed=%s',type(error).__name__)
+        log_event(request.app,'ERROR','MA',operation=locals().get('operation') or 'unknown',accepted=False,error_kind=type(error).__name__)
         return web.json_response({'handled':True,'accepted':False,'message':'音乐通道暂时无法确认执行结果，请稍后再试。'})
 
 async def tts(request):
@@ -384,7 +429,9 @@ async def tts(request):
         raise web.HTTPBadRequest(text='Unsupported voice')
     cache_key=(config['tts_base_url'],config['tts_model'],voice,config['tts_speed'],config['tts_gain'],text)
     started=time.monotonic()
-    if cache_key in CACHE:return web.Response(body=CACHE[cache_key],content_type='audio/mpeg',headers={'Cache-Control':'no-store'})
+    if cache_key in CACHE:
+        log_event(request.app,'INFO','TTS',request_turn(request),text=text,model=config['tts_model'],backend='cache',status='first_audio',duration_ms=0)
+        return web.Response(body=CACHE[cache_key],content_type='audio/mpeg',headers={'Cache-Control':'no-store'})
     body={'model':config['tts_model'],'voice':voice,'input':text,'response_format':'mp3',
         'stream':True,'speed':config['tts_speed'],'gain':config['tts_gain']}
     data=bytearray()
@@ -399,6 +446,8 @@ async def tts(request):
             response=web.StreamResponse(headers={'Content-Type':'audio/mpeg','Cache-Control':'no-store','Accept-Ranges':'none'})
             await response.prepare(request);await response.write(first);data.extend(first)
             LOG.info('TTS first_audio_seconds=%.3f characters=%d',time.monotonic()-started,len(text))
+            log_event(request.app,'INFO','TTS',request_turn(request),text=text,model=config['tts_model'],backend='cloud',
+                status='first_audio',duration_ms=round((time.monotonic()-started)*1000))
             async for chunk in upstream.content.iter_chunked(8192):
                 await response.write(chunk)
                 if len(data)<512*1024:data.extend(chunk)
@@ -409,6 +458,9 @@ async def tts(request):
         return response
     except (aiohttp.ClientError,asyncio.TimeoutError,RuntimeError) as exc:
         LOG.warning('TTS failed cause=%s',type(exc).__name__)
+        log_event(request.app,'ERROR','TTS',request_turn(request),model=config['tts_model'],backend='cloud',
+            status='failed',error_kind='timeout' if isinstance(exc,asyncio.TimeoutError) else type(exc).__name__,
+            duration_ms=round((time.monotonic()-started)*1000))
         raise web.HTTPBadGateway(text='Cloud speech unavailable')
 async def gateway_config(request):
     if request.method=='GET':return web.json_response(SETTINGS.public(),headers={'Cache-Control':'no-store'})
@@ -455,12 +507,53 @@ async def health(request):
         'music_last_error':request.app.get('music_last_error',''),
         'fast_local_controls':config['local_first'],'complex_asr_timeout_seconds':config['asr_timeout_seconds'],
         'restart_required':SETTINGS.public()['restart_required']})
+
+def log_response(payload,status=200):
+    return web.Response(body=encode_json(payload),status=status,content_type='application/json',
+        headers={'Cache-Control':'no-store'})
+
+async def log_payload(request,empty=False):
+    if request.content_length is not None and request.content_length>MAX_HTTP_BYTES:
+        raise web.HTTPRequestEntityTooLarge(max_size=MAX_HTTP_BYTES,actual_size=request.content_length)
+    data=bytearray()
+    async for chunk in request.content.iter_chunked(8192):
+        data.extend(chunk)
+        if len(data)>MAX_HTTP_BYTES:
+            raise web.HTTPRequestEntityTooLarge(max_size=MAX_HTTP_BYTES,actual_size=len(data))
+    if empty and not data:return {}
+    try:payload=json.loads(data)
+    except (ValueError,UnicodeError):raise web.HTTPBadRequest(text='Invalid log JSON')
+    if not isinstance(payload,dict):raise web.HTTPBadRequest(text='Expected log object')
+    return payload
+
+async def event_history(request):
+    history=request.app['event_log']
+    try:
+        if request.path=='/logs':
+            return log_response(await history.read(int(request.query.get('limit','50'))))
+        if request.path=='/logs/config':
+            if request.method=='GET':return log_response(history.config())
+            return log_response(await history.configure(await log_payload(request)))
+        if request.path=='/logs/clear':
+            if await log_payload(request,empty=True):raise ValueError('Unexpected clear fields')
+            return log_response(await history.clear())
+        payload=await log_payload(request)
+        if set(payload)!={'generation','events'}:raise ValueError('Expected generation and events')
+        return log_response(history.record_batch(payload['events'],payload['generation']))
+    except (ValueError,TypeError,OverflowError):
+        return log_response({'error':'Invalid log request'},400)
+    except RuntimeError:
+        return log_response({'error':'Event log storage unavailable'},503)
+
 logging.basicConfig(level=logging.INFO,format='%(asctime)s %(message)s')
 app=web.Application(middlewares=[local_only],client_max_size=1024*1024)
 app.on_startup.append(startup);app.on_cleanup.append(cleanup)
 app.router.add_get('/config',gateway_config);app.router.add_post('/config',gateway_config)
 app.router.add_get('/models',asr_models);app.router.add_post('/asr/test',asr_test)
 app.router.add_post('/music/control',music_control);app.router.add_get('/asr',recognize);app.router.add_get('/tts',tts);app.router.add_get('/health',health)
+app.router.add_get('/logs',event_history)
+app.router.add_get('/logs/config',event_history);app.router.add_post('/logs/config',event_history)
+app.router.add_post('/logs/clear',event_history);app.router.add_post('/logs/events',event_history)
 if __name__=='__main__':
     config=SETTINGS.snapshot()
     web.run_app(app,host=config['bind_host'],port=config['bind_port'],access_log=None)

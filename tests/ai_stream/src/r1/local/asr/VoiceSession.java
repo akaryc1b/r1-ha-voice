@@ -1,1 +1,1 @@
-package r1.local.asr; public class VoiceSession {public static volatile int turn=0; public static boolean isCurrent(int value){return turn==value;}public static void next(){turn++;VoiceAiStream.cancel();}}
+package r1.local.asr; public class VoiceSession {public static volatile int turn=0; public static int currentTurn(){return turn;}public static boolean isCurrent(int value){return turn==value;}public static void next(){turn++;VoiceAiStream.cancel();}}

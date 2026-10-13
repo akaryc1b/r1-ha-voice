@@ -52,6 +52,15 @@ public final class CloudVoiceSettings {
         } catch (Exception error) { atomic.failWrite(output); throw error; }
     }
 
+    static synchronized void saveLogState(boolean enabled,String level,long generation) throws Exception {
+        JSONObject settings=read();
+        if (settings.optBoolean("logs_enabled",false)==enabled &&
+                level.equals(settings.optString("logs_level","INFO")) &&
+                settings.optLong("logs_generation",0)==generation) return;
+        settings.put("logs_enabled",enabled);settings.put("logs_level",level);
+        settings.put("logs_generation",generation);write(settings);
+    }
+
     private static void connectionValues(JSONObject settings, Map<String,String> values) throws Exception {
         if (values.containsKey("gateway_url"))
             settings.put("gateway_url",checkedUrl(values.get("gateway_url"),false));
@@ -84,6 +93,12 @@ public final class CloudVoiceSettings {
         settings.put("cloud_tts","cosy".equals(tts));
         if (values.containsKey("voice")) settings.put("cloud_voice",values.get("voice"));
         settings.put("music_ack","true".equals(values.get("music_ack")));
+        if (values.containsKey("listen_music_mute")) {
+            String mute = values.get("listen_music_mute");
+            if (!("true".equals(mute) || "false".equals(mute)))
+                throw new IllegalArgumentException("收音时音乐静音设置需为开或关");
+            settings.put("listen_music_mute","true".equals(mute));
+        }
         if (values.containsKey("asr_retry_once")) {
             String retry = values.get("asr_retry_once");
             if (!("true".equals(retry) || "false".equals(retry)))
@@ -127,6 +142,7 @@ public final class CloudVoiceSettings {
         result.put("voice",settings.optString("cloud_voice","anna"));
         result.put("music_route",settings.optString("music_route","ha"));
         result.put("music_ack",settings.optBoolean("music_ack",false));
+        result.put("listen_music_mute",settings.optBoolean("listen_music_mute",true));
         result.put("asr_retry_once",settings.optBoolean("asr_retry_once",true));
         result.put("ai_streaming",settings.optBoolean("ai_streaming",true));
         result.put("ai_first_content_timeout_ms",settings.optInt("ai_first_content_timeout_ms",4500));
@@ -138,6 +154,7 @@ public final class CloudVoiceSettings {
     }
 
     public static boolean handle(Socket socket, String route, BufferedReader reader, String method) {
+        if (VoiceDiagnostics.handle(socket,route,reader,method)) return true;
         if (!route.startsWith("/voice_config") && !route.equals("/voice_health") && !route.equals("/voice_test") && !route.startsWith("/voice_volume") && !route.startsWith("/music_config") && !route.startsWith("/voice_gateway_config") && !route.startsWith("/voice_connection") && !route.startsWith("/voice_models") && !route.startsWith("/voice_asr_test")) return false;
         JSONObject result; int status = 200;
         try {

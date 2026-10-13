@@ -1,0 +1,42 @@
+#tab-logs .vl-card { max-width:960px; margin-left:auto; margin-right:auto; }
+#tab-logs .vl-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+#tab-logs .vl-heading h3 { margin:0; }
+#tab-logs .vl-help { color:#596579; line-height:1.65; font-size:14px; }
+#tab-logs .vl-config, #tab-logs .vl-tools { display:flex; align-items:center; flex-wrap:wrap; gap:12px 18px; }
+#tab-logs .vl-config { padding:16px; border:1px solid #dce4ee; border-radius:12px; background:#f6f9fd; }
+#tab-logs .vl-toggle, #tab-logs .vl-level { display:flex; align-items:center; gap:8px; font-size:15px; }
+#tab-logs .vl-toggle input { width:18px; height:18px; margin:0; accent-color:#2674ce; }
+#tab-logs .vl-level select { width:auto; min-width:96px; margin:0; }
+#tab-logs button { width:auto; min-height:40px; margin:0; cursor:pointer; }
+#tab-logs button:disabled { cursor:wait; opacity:.55; }
+#tab-logs .vl-secondary { background:#edf3f9; color:#234464; border:1px solid #ccd9e7; }
+#tab-logs .vl-danger { background:#fff3f2; color:#a3312b; border:1px solid #e4c3c0; }
+#tab-logs .vl-status { color:#4b6076; font-size:14px; min-height:1.5em; line-height:1.5; overflow-wrap:anywhere; }
+#tab-logs .vl-error { color:#b42318; }
+#tab-logs .vl-list { display:grid; gap:12px; margin-top:16px; }
+#tab-logs .vl-empty { padding:24px 16px; text-align:center; color:#62748a; background:#f6f9fd; border-radius:12px; }
+#tab-logs .vl-entry { border:1px solid #dce4ee; border-left:4px solid #3d88cf; border-radius:10px; padding:14px 16px; background:#fff; min-width:0; }
+#tab-logs .vl-debug { border-left-color:#8795a5; }
+#tab-logs .vl-warn { border-left-color:#c68a15; }
+#tab-logs .vl-error.vl-entry { border-left-color:#c4483e; color:inherit; }
+#tab-logs .vl-entry-head { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+#tab-logs .vl-badge { font:600 11px/1.4 monospace; letter-spacing:.03em; background:#edf3f9; padding:3px 7px; border-radius:5px; color:#31516f; }
+#tab-logs .vl-time { margin-left:auto; font-size:12px; color:#65758a; }
+#tab-logs .vl-stage { font-size:14px; overflow-wrap:anywhere; }
+#tab-logs .vl-meta { font-size:12px; color:#738096; margin:8px 0; overflow-wrap:anywhere; }
+#tab-logs .vl-fields { display:grid; grid-template-columns:76px minmax(0,1fr); gap:6px 12px; margin:12px 0 0; font-size:14px; line-height:1.55; }
+#tab-logs .vl-fields dt { color:#66768a; }
+#tab-logs .vl-fields dd { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; color:#23374d; }
+@media(max-width:540px) {
+ #tab-logs .vl-card { padding:16px; }
+ #tab-logs .vl-config { padding:12px; gap:14px; }
+ #tab-logs .vl-config #vl-save { width:100%; }
+ #tab-logs .vl-heading { align-items:flex-start; }
+ #tab-logs .vl-heading h3 { font-size:19px; }
+ #tab-logs .vl-heading button { font-size:12px; padding:8px 10px; }
+ #tab-logs .vl-tools { gap:10px; }
+ #tab-logs .vl-tools label { width:100%; }
+ #tab-logs .vl-entry { padding:12px; }
+ #tab-logs .vl-time { margin-left:0; width:100%; }
+ #tab-logs .vl-fields { grid-template-columns:64px minmax(0,1fr); gap:5px 8px; font-size:13px; }
+}

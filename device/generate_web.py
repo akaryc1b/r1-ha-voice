@@ -5,8 +5,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 WEB = ROOT / "web"
 card = (WEB / "voice-card.html").read_text(encoding="utf-8")
-script = "<style>" + (WEB / "voice-settings.css").read_text(encoding="utf-8") + "</style>\n"
-script += "<script>" + (WEB / "voice-settings.js").read_text(encoding="utf-8") + "</script>\n"
+script = ""
+for name in ("voice-settings", "voice-logs"):
+    script += "<style>" + (WEB / (name + ".css")).read_text(encoding="utf-8") + "</style>\n"
+    script += "<script>" + (WEB / (name + ".js")).read_text(encoding="utf-8") + "</script>\n"
 for text in [card, script]:
     if len(text.encode("utf-8")) > 60000:
         raise ValueError("页面常量超过 Java 常量池长度，请拆分页面")

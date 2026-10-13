@@ -18,6 +18,11 @@ if not SOURCE.is_file():SOURCE=ROOT/'gateway/voice_gateway.py'
 class ClientError(Exception):
     pass
 
+class FakeEventLog:
+    def __init__(self,*args,**kwargs):pass
+    async def start(self):return self
+    async def close(self):pass
+
 
 class Session:
     def __init__(self,**kwargs):
@@ -48,6 +53,7 @@ def isolated():
     assert len(funcs)==len(names)
     module=ast.Module(body=funcs,type_ignores=[])
     env={'asyncio':asyncio,'time':time,'re':re,'LOG':logging.getLogger('isolated-music'),
+         'EventLog':FakeEventLog,'ROOT':ROOT,'log_event':lambda *args,**kwargs:None,
          'SETTINGS':NS(snapshot=lambda:{'ma_queue_id':'test_queue','r1_control_url':'http://invalid.test'}),
          'MUSIC_COMMANDS':{'播放':'resume','继续播放':'resume','随机播放点音乐':'random',
                            '暂停':'pause','停止':'stop','下一首':'next'},

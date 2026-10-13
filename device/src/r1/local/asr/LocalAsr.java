@@ -45,6 +45,8 @@ public final class LocalAsr {
         engine = value;
         deviceContext = context;
         SpeechRouteVolume.initialize(context);
+        MusicListenMute.initialize(context);
+        VoiceDiagnostics.initialize();
         if (initialized) return;
         if (context == null) { Log.e(TAG, "INITIALIZATION_CONTEXT_UNAVAILABLE"); return; }
         initialized = true;
@@ -143,6 +145,7 @@ public final class LocalAsr {
         active = null;
         if (previous != null) {
             previous.stop = true;
+            previous.closeAudio();
             previous.opened.countDown(); previous.finished.countDown();
             if (previous.socket != null) previous.socket.close(1000,"new wakeup");
         }
@@ -190,6 +193,9 @@ public final class LocalAsr {
 
     public static void speechEvent(int event) {
         retryAfterSpeech(event);
+        if (event==2106 || event==2107 || event==2111)
+            VoiceDiagnostics.record(event==2111?"DEBUG":"INFO","TTS",VoiceSession.currentTurn(),
+                    "status",event==2106?"playing":event==2107?"completed":"cancelled");
         if (event == 2106 || event == 2107) {
             // 自带 TTS 会重设系统音量；等 SDK 回调结束后恢复用户保存的播报音量。
             MAIN.post(new Runnable() { @Override public void run() { restoreSpeechVolume(); }});
@@ -273,10 +279,11 @@ public final class LocalAsr {
 
     private static synchronized void start(NativeANTEngine value, String mode, boolean continuation) {
         if (active != null) { Log.i(TAG, "ALREADY_LISTENING"); return; }
+        Session session = null;
         try {
             JSONObject settings = config();
             if (!continuation && ("voice".equals(mode) || "sample".equals(mode))) VoiceSession.newTurn();
-            Session session = new Session(value, source, mode, settings,continuation);
+            session = new Session(value, source, mode, settings,continuation);
             if (session.captureAudio) {
                 settings.put("capture_next", false);
                 FileOutputStream file = new FileOutputStream(CONFIG);
@@ -291,7 +298,9 @@ public final class LocalAsr {
             if ("voice".equals(mode)) value.pipeline().fireASREvent(1101);
             new Thread(session, "r1-local-asr").start();
             Log.i(TAG, "START mode=" + mode);
+            VoiceDiagnostics.record("DEBUG","ASR",VoiceSession.currentTurn(),"status","started","operation",mode);
         } catch (Exception error) {
+            if (session != null) session.closeAudio();
             active = null;
             Log.e(TAG, "START_FAILED", error);
             value.pipeline().fireASREvent(1102);
@@ -335,6 +344,7 @@ public final class LocalAsr {
         final String url;
         final int channels;
         final boolean captureAudio;
+        final MusicListenMute.Lease musicMute;
         final int turn;
         final boolean retryEnabled;
         final boolean retryContinuation;
@@ -347,6 +357,7 @@ public final class LocalAsr {
         volatile boolean stop;
         volatile String recognized = "";
         volatile String failure = "";
+        volatile String recognizedBackend = "";
         volatile boolean finalResult;
         boolean audioOpen;
         volatile boolean heldOpen;
@@ -370,6 +381,7 @@ public final class LocalAsr {
             CloudVoiceSettings.asrServer(url);
             watchdogMilliseconds = Math.max(20,Math.min(120,settings.optInt("session_timeout_seconds",45)))*1000;
             if (continuation) watchdogMilliseconds = Math.min(watchdogMilliseconds,15000);
+            musicMute = MusicListenMute.acquire("voice".equals(mode) && settings.optBoolean("listen_music_mute",true));
         }
 
         @Override public void run() {
@@ -398,6 +410,11 @@ public final class LocalAsr {
                 if (socket != null) socket.close(1000, "complete");
                 MAIN.removeCallbacks(watchdog);
                 final String result = normalize(recognized);
+                VoiceDiagnostics.record(failure.length()>0?"WARN":"INFO","ASR",turn,
+                        "text",finalResult && failure.length()==0?result:"", "response",failure,
+                        "backend",recognizedBackend,"operation",mode,
+                        "status",failure.length()>0?"failed":"recognized",
+                        "duration_ms",SystemClock.elapsedRealtime()-started);
                 Log.i(TAG, "FINISH mode=" + mode + " bytes=" + bytes +
                         " rms=" + (samples == 0 ? 0 : (int)Math.sqrt((double)squares / samples)) +
                         " peak=" + peak + " elapsed_ms=" +
@@ -432,8 +449,10 @@ public final class LocalAsr {
                     if ("Done!".equals(message)) { finalResult = true; stop = true; finished.countDown(); return; }
                     try {
                         JSONObject reply = new JSONObject(message);
+                        if (reply.has("backend")) recognizedBackend=reply.optString("backend","");
                         if (reply.optString("error", "").length() > 0) {
-                            failure = AsrRetryOnce.PROMPT;
+                            failure = AsrRetryOnce.PROMPT.equals(reply.optString("error","")) ?
+                                    AsrRetryOnce.PROMPT : "语音识别服务暂时没有响应，请稍后再试。";
                             retryable = reply.optBoolean("retryable",false);
                             stop = true;
                             finished.countDown();
@@ -546,6 +565,7 @@ public final class LocalAsr {
         }
 
         private synchronized void closeAudio() {
+            musicMute.close();
             if (!audioOpen) return;
             audioOpen = false;
             closing = true;

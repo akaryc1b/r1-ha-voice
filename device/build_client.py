@@ -118,9 +118,11 @@ if initialize not in body:
 from apply_ai_stream_hooks import apply as apply_ai_stream_hooks
 from apply_speech_stream import apply as apply_speech_stream
 from apply_asr_retry_hooks import apply as apply_asr_retry_hooks
+from apply_diagnostic_hooks import apply as apply_diagnostic_hooks
 apply_ai_stream_hooks(root)
 apply_speech_stream(root)
 apply_asr_retry_hooks(root)
+apply_diagnostic_hooks(root)
 run([java,"-Xmx1g","-cp",str(root/"tools/*"),"org.jf.smali.Main","assemble","--api","22","-j","4","-o",str(root/"rebuilt.dex"),str(root/"smali")])
 prefix=bytearray((root/"rebuilt.dex").read_bytes());tail=bytearray(original[old_offset:]);delta=len(prefix)-old_offset
 # APK 的 ZIP 条目和 v1 签名保持原样，仅调整容器的绝对偏移。

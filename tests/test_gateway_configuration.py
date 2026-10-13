@@ -158,13 +158,13 @@ class GatewayConfigurationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["backend"], "cloud:custom/backup")
         self.assertEqual([c[1] for c in self.calls], ["custom/failing", "custom/backup"])
 
-    async def test_upstream_error_mixed_with_empty_text_does_not_auto_retry(self):
+    async def test_available_backup_empty_text_can_retry_despite_primary_service_error(self):
         self.store.update({"local_first": False, "asr_model": "custom/failing",
                            "asr_fallback_model": "custom/backup"})
         self.cloud_text = ""
         result = await self.recognize()
         self.assertEqual(result["text"], "")
-        self.assertFalse(result["retryable"])
+        self.assertTrue(result["retryable"])
 
     async def test_empty_or_incomplete_cloud_is_never_executed(self):
         self.local_text = "放手歌"

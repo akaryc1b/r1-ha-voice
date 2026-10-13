@@ -19,6 +19,8 @@ public final class CloudSpeech {
     private static Runnable watchdog;
 
     public static boolean play(final c owner, final String text) {
+        if (!Boolean.TRUE.equals(BYPASS.get()) && text!=null && !text.startsWith("/") && !text.startsWith("file:") && !text.startsWith("http"))
+            r1.local.asr.VoiceDiagnostics.record("INFO","TTS",r1.local.asr.VoiceSession.currentTurn(),"status","requested","response",text);
         if (!Boolean.TRUE.equals(BYPASS.get())) r1.local.asr.LocalAsr.speechRequested(text);
         if (Boolean.TRUE.equals(BYPASS.get()) || text == null || text.trim().length() == 0) return false;
         Log.i("R1SpeechTiming", "REQUEST characters=" + text.length());

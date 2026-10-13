@@ -1,0 +1,30 @@
+{
+  "scope": "mock browser and temporary generated Java only; no live endpoint writes, no APK build or install",
+  "passed": 17,
+  "checks": [
+    "inactive page makes no API requests",
+    "initial configuration and latest entries load without writes",
+    "only explicit save writes enabled and storage level",
+    "log refresh cannot overwrite unsaved storage level",
+    "visible page refreshes every five seconds",
+    "automatic refresh can be disabled while manual refresh works",
+    "return restores original page and values; inactive refresh stops",
+    "document visibility gates background refresh",
+    "single request in flight including overlapping refresh intervals",
+    "HTTP, non-JSON and malformed data retain last records with explicit error",
+    "request timeout preserves records and releases request lock",
+    "text-only rendering, URL and credential masking, unknown field rejection",
+    "clear cancellation has no write; confirmed clear targets diagnostic endpoint only",
+    "375px mobile viewport wraps long entries without horizontal overflow",
+    "configuration read failure disables writes and manual refresh recovers",
+    "no uncaught browser errors",
+    "temporary Java generator includes both modules below constant byte limit"
+  ],
+  "script_utf8_bytes": 30774,
+  "source_sha256": {
+    "voice-logs.js": "fd60379f090f40a466ce08b3e0d7a3a865b4d66a0d8f23fe813f610a4667cf83",
+    "voice-logs.css": "51523a6532b416ea174090b4344764dcfee2aa91ceba1e6e98c7b8e4ed5e1259",
+    "generate_web.py": "f0ae67ffcea5c40fc7056891bc395f44cbdf1e20a1255569776db8cdf737eaa3",
+    "test_voice_logs_browser.py": "49834825e7b93bd01cc6cc3d158242876b466ce6035bdb159ea750dd0c433001"
+  }
+}

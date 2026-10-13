@@ -60,6 +60,7 @@ public final class VoiceAiStream {
         try { settings = CloudVoiceSettings.read(); }
         catch (Exception ignored) { settings = new JSONObject(); }
         if (!VoiceSession.isCurrent(turn)) return "";
+        VoiceDiagnostics.record("INFO","ROUTE",turn,"route","AI","text",question,"status","requested");
         final Reply reply = new Reply(handler, turn, settings);
         synchronized (VoiceAiStream.class) { cancel(); active = reply; }
         scheduleDeadline(reply);
@@ -111,11 +112,13 @@ public final class VoiceAiStream {
                 finish(reply);
             }
             Log.i("R1AIStream", "COMPLETE elapsed_ms=" + (System.currentTimeMillis() - began) + " characters=" + reply.answer.length());
+            VoiceDiagnostics.record("INFO","AI",turn,"status","completed","response",reply.answer.toString(),"duration_ms",System.currentTimeMillis()-began);
             return reply.answer.toString();
         } catch (Exception error) {
             synchronized (VoiceAiStream.class) {
                 if (!current(reply)) return "";
                 Log.w("R1AIStream", "FAILED " + error.getClass().getSimpleName() + " spoken=" + reply.spoken);
+                VoiceDiagnostics.record("WARN","AI",turn,"status","stream_failed","error_kind",error.getClass().getSimpleName());
                 if (reply.spoken) {
                     // 已开始播报时不重新请求、重复朗读前文；明确告知本次回答中断。
                     reply.deadlineExceeded = false;
@@ -155,6 +158,7 @@ public final class VoiceAiStream {
         builder.setAccessible(true);
         JSONObject body = new JSONObject((String) builder.invoke(client, question, history, null));
         body.put("stream", stream);
+        VoiceDiagnostics.record("DEBUG","AI",VoiceSession.currentTurn(),"status","request","model",body.optString("model",""));
         Field configField = client.getClass().getDeclaredField("config");
         configField.setAccessible(true);
         Object config = configField.get(client);
@@ -213,9 +217,12 @@ public final class VoiceAiStream {
             JSONObject response = new JSONObject(data.toString());
             String answer = response.getJSONArray("choices").getJSONObject(0).getJSONObject("message").optString("content");
             Log.i("R1AIStream", "SYNC_COMPLETE elapsed_ms=" + ((System.nanoTime() - reply.beganNanos) / 1000000L));
+            VoiceDiagnostics.record("INFO","AI",reply.turn,"status","completed","response",answer,
+                    "duration_ms",(System.nanoTime()-reply.beganNanos)/1000000L);
             return answer.trim().length() > 0 ? answer : UNAVAILABLE;
         } catch (Exception error) {
             Log.w("R1AIStream", "SYNC_FAILED " + error.getClass().getSimpleName());
+            VoiceDiagnostics.record("ERROR","AI",reply.turn,"status","failed","error_kind",error.getClass().getSimpleName());
             return current(reply) ? UNAVAILABLE : "";
         } finally {
             synchronized (VoiceAiStream.class) { reply.generating = false; reply.finished = true; }
@@ -237,6 +244,7 @@ public final class VoiceAiStream {
                 connection = reply.connection;
             }
             Log.w("R1AIStream", "DEADLINE phase=" + reason);
+            VoiceDiagnostics.record("WARN","AI",reply.turn,"status","timeout","error_kind",reason);
             disconnectAsync(connection);
         }};
         DEADLINES.schedule(reply.deadline, 50, 50);

@@ -16,6 +16,7 @@
 <button type="button" onclick="cvModels(this)">读取接口模型列表</button><button id="cv-test-asr" disabled type="button" onclick="cvAsrTest(this)">测试已保存的 ASR</button>
 <p class="cv-help">ASR 测试仅发送安装包中的合成“暂停”录音，不会暂停音乐或执行任何指令。列表由服务商返回，不保证每个模型都支持 ASR。</p>
 </div>
+<div class="form-item"><label><input id="cv-listen-music-mute" type="checkbox">收音时临时静音音乐</label><p class="cv-help">降低音箱自己的音乐对识别的干扰。收音结束恢复音乐声音，保留原音量和原有静音；助手播报音量不受影响。</p></div>
 <div class="form-item"><label><input id="cv-asr-retry-once" type="checkbox">没听清时，提示说完后自动再听一次</label><p class="cv-help">提示结束后可直接重说，无需再次唤醒。仅续听一次；网络故障不会反复收音，续听最多等待15秒。</p></div>
 <details class="cv-advanced"><summary>AI 回答速度</summary>
 <div class="form-item"><label><input id="cv-ai-streaming" type="checkbox">收到完整首句后开始播报，其余回答按顺序继续</label></div>

@@ -1,12 +1,12 @@
 {
   "scope": "2026-10-13 actual installed environment, no acoustic first-song timestamp",
-  "voice_client_sha256": "105942ceb9d625bd25a9b458fff13cd4e387bd9008e47e4d50de08d410017541",
+  "voice_client_sha256": "9084c13b67b64f76350a806cd064d540db4f4b879a03cc87f8d9ce290a1cc3cd",
   "voice_client_android_art": "passed; installed APK SHA256 rechecked",
   "asr": {
-    "primary": "FunAudioLLM/SenseVoiceSmall",
+    "primary": "TeleAI/TeleSpeechASR",
     "primary_timeout_s": 4,
-    "fallback": "TeleAI/TeleSpeechASR",
-    "fallback_timeout_s": 4,
+    "fallback": "FunAudioLLM/SenseVoiceSmall",
+    "fallback_timeout_s": 2,
     "local_first": false,
     "real_song_request_route": "HA_DIRECT",
     "real_resume_route": "MA_DIRECT",
@@ -43,7 +43,14 @@
       "normalization_tests": 16,
       "browser_toggle_save_refresh": "passed",
       "live_automatic_relisten": "pending",
-      "conditions": "empty/incomplete recognition only; once; real prompt completion; 12s prompt deadline, 15s continuation watchdog"
+      "conditions": "any provider returned empty text or incomplete recognition allows once; all-provider service failure exits; real prompt completion; 12s/15s deadlines"
+    },
+    "listen_music_mute": {
+      "enabled": true,
+      "lease_tests": 12,
+      "real_api22_probe": "music count 0->1->0; volume indices unchanged; speech2 unaffected",
+      "live_session_pairing": "two user voice sessions acquired/released; texts correctly transcribed",
+      "music_background_accuracy": "listening test pending"
     }
   },
   "tts": {
@@ -112,5 +119,21 @@
     "hard_resync_final_30s": 2,
     "partial_chunk_shortage_final_30s": 1
   },
-  "github": "publication explicitly deferred by user; no remote upload"
+  "github": "publication explicitly deferred by user; no remote upload",
+  "diagnostic_logs": {
+    "default_enabled": false,
+    "default_level": "INFO",
+    "backend_combined_tests": 43,
+    "browser_mock_checks": 17,
+    "device_transport_test": "passed; nonblocking, severity, redaction, generation-safe clear, HA response",
+    "live_browser": "passed; saved and refreshed; synthetic ASR stored in device+gateway; empty-history clear verified; original disabled state restored",
+    "live_history_preserved": true,
+    "storage_limit": "two 1MiB JSONL files; only log history cleared",
+    "final_focused_regression": {
+      "log_storage_http": 15,
+      "gateway": 16,
+      "passed": true
+    },
+    "gateway_source_sha256": "ce3c0c2d4d79d8ba18df669618ff91b58a79a90efb6074c521cbe1e188e2c581"
+  }
 }

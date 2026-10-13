@@ -88,6 +88,7 @@ async function cvLoad(){
   document.getElementById('cv-session-timeout').value=d.session_timeout_seconds;
   document.getElementById('cv-music-route').value=d.music_route||'ha';
   document.getElementById('cv-music-ack').checked=!!d.music_ack;
+  document.getElementById('cv-listen-music-mute').checked=d.listen_music_mute!==false;
   document.getElementById('cv-asr-retry-once').checked=d.asr_retry_once!==false;
   document.getElementById('cv-ai-streaming').checked=d.ai_streaming!==false;
   document.getElementById('cv-ai-first-content').value=(d.ai_first_content_timeout_ms||4500)/1000;
@@ -126,7 +127,8 @@ async function cvSave(b){
   if(cvGatewayReady)await cvSaveGateway(cvVoiceFields);
   await cvPost('/voice_config',{asr:document.getElementById('cv-asr').value,tts:document.getElementById('cv-tts').value,
    music_ack:document.getElementById('cv-music-ack').checked,
-   asr_retry_once:document.getElementById('cv-asr-retry-once').checked,
+   listen_music_mute:document.getElementById('cv-listen-music-mute').checked,
+    asr_retry_once:document.getElementById('cv-asr-retry-once').checked,
     ai_streaming:document.getElementById('cv-ai-streaming').checked,
    speech_stream:Number(document.getElementById('cv-speech-stream').value),...ai,...cvConnectionValues()});
   await cvFetch('/voice_volume?target=speech&operation=set&percent='+document.getElementById('cv-speech-volume').value);

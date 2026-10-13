@@ -1,0 +1,1 @@
+package r1.local.asr; public final class VoiceSession {public static int currentTurn(){return 7;}}

@@ -26,6 +26,7 @@ public final class MusicRoute {
             connection.setRequestMethod("POST");connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type","application/json; charset=utf-8");
             JSONObject payload = new JSONObject();payload.put("text",text);payload.put("turn",VoiceSession.currentTurn());
+            VoiceDiagnostics.record("INFO","ROUTE",VoiceSession.currentTurn(),"route","MA","text",text,"status","requested");
             byte[] bytes=payload.toString().getBytes("UTF-8");connection.setFixedLengthStreamingMode(bytes.length);
             OutputStream output=connection.getOutputStream();output.write(bytes);output.close();
             if (connection.getResponseCode()!=200) throw new IOException("Music gateway unavailable");
@@ -36,11 +37,16 @@ public final class MusicRoute {
                 buffer.write(chunk,0,count);
             }
             input.close();JSONObject response=new JSONObject(new String(buffer.toByteArray(),"UTF-8"));
+            VoiceDiagnostics.record(response.optBoolean("handled",false) && !response.optBoolean("accepted",false)?"WARN":"INFO",
+                    "MA",VoiceSession.currentTurn(),"status",response.optBoolean("handled",false)?"acknowledged":"delegated_to_HA",
+                    "accepted",response.optBoolean("accepted",false),"response",response.optString("message",""),
+                    "operation",response.optString("operation",""));
             if (!response.optBoolean("handled",false)) return null;
             android.util.Log.i("R1VoiceRoute","MA_DIRECT");
             if (response.optBoolean("accepted",false) && !CloudVoiceSettings.read().optBoolean("music_ack",false)) return "";
             return response.optString("message","音乐通道未返回执行结果，请稍后再试。");
         } catch (Exception error) {
+            VoiceDiagnostics.record("ERROR","MA",VoiceSession.currentTurn(),"status","failed","error_kind",error.getClass().getSimpleName());
             android.util.Log.w("R1VoiceRoute","MA_UNCONFIRMED");
             return "音乐通道暂时无法确认执行结果，请稍后再试。";
         } finally { if (connection!=null) connection.disconnect(); }

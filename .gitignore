@@ -1,5 +1,6 @@
 # 私密配置与用户授权
 **/*.private*
+**/diagnostic-logs/
 **/.backups/
 **/secrets.yaml
 **/r1_music_authorization.yaml
