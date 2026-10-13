@@ -16,6 +16,13 @@
 <button type="button" onclick="cvModels(this)">读取接口模型列表</button><button id="cv-test-asr" disabled type="button" onclick="cvAsrTest(this)">测试已保存的 ASR</button>
 <p class="cv-help">ASR 测试仅发送安装包中的合成“暂停”录音，不会暂停音乐或执行任何指令。列表由服务商返回，不保证每个模型都支持 ASR。</p>
 </div>
+<div class="form-item"><label><input id="cv-asr-retry-once" type="checkbox">没听清时，提示说完后自动再听一次</label><p class="cv-help">提示结束后可直接重说，无需再次唤醒。仅续听一次；网络故障不会反复收音，续听最多等待15秒。</p></div>
+<details class="cv-advanced"><summary>AI 回答速度</summary>
+<div class="form-item"><label><input id="cv-ai-streaming" type="checkbox">收到完整首句后开始播报，其余回答按顺序继续</label></div>
+<div class="form-item"><label>等待 AI 首段正文（秒）</label><input id="cv-ai-first-content" type="number" min="0.5" max="30" step="0.5"></div>
+<div class="form-item"><label>首次回答等待上限（秒，包含重试）</label><input id="cv-ai-first-reply" type="number" min="0.5" max="60" step="0.5"></div>
+<div class="form-item"><label>完整回答生成上限（秒）</label><input id="cv-ai-answer" type="number" min="0.5" max="120" step="0.5"></div>
+<p class="cv-help">接口需支持流式输出。首句生成前不会用“好的”等提示代替答案。聊天模型、接口和密钥仍在 <a href="/5">AI 设置</a> 中调整；音乐和家居控制保持原分流。</p></details>
 <div class="form-item"><label>回答播报</label><select id="cv-tts" onchange="cvToggleTts()"><option value="cosy">云端 TTS（可配置兼容接口）</option><option value="original">设备自带音色（仅播报文字）</option></select></div>
 <div id="cv-cloud-options">
 <div class="form-item"><label for="cv-gw-tts_model">TTS 模型 ID</label><input id="cv-gw-tts_model" type="text" autocomplete="off" placeholder="FunAudioLLM/CosyVoice2-0.5B"></div><div class="form-item"><label for="cv-gw-tts_voice">TTS 音色 ID</label><input id="cv-gw-tts_voice" type="text" autocomplete="off" list="cv-tts-voices" placeholder="FunAudioLLM/CosyVoice2-0.5B:anna"></div>
@@ -25,6 +32,7 @@
 <p class="cv-help">TTS 接口需兼容 <code>/audio/speech</code> 并返回 MP3；模型和音色必须由该服务商支持。增益和语速参数支持范围以服务商为准。</p></details></div>
 <div id="cv-original-options" hidden><p class="cv-help">以下选项仅用于读出文字，不会启用旧语音助手。</p></div>
 <div class="form-item"><label>助手播报音量 <span id="cv-speech-value"></span></label><input id="cv-speech-volume" type="range" min="0" max="100" step="1" oninput="cvVolumeLabel('speech')"></div>
+<details class="cv-advanced"><summary>设备播报音量兼容</summary><div class="form-item"><label>播报音量通道</label><select id="cv-speech-stream"><option value="9">设备 TTS 通道</option><option value="2">响铃音量通道</option></select></div><p class="cv-help">部分固件会把 TTS 音量与音乐联动，可尝试响铃通道。切换后重新调整播报音量；音乐音量由上方音乐设置控制。</p></details>
 <div class="form-item"><label><input id="cv-music-ack" type="checkbox">MA 播放控制的确认播报</label></div>
 <details class="cv-advanced"><summary>语音网关连接</summary>
 <div class="form-item"><label>音箱访问的网关地址</label><input id="cv-gateway-url" type="url" autocomplete="off" placeholder="http://N1地址:16068"></div>

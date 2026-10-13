@@ -28,6 +28,7 @@ class GatewayConfigurationTests(unittest.IsolatedAsyncioTestCase):
         self.calls = []
         self.local_text = "暂停"
         self.cloud_text = "你好"
+        self.playlists = [{"uri": "apple_music://playlist/test-pop"}]
         upstream = web.Application()
         upstream.router.add_post("/v1/audio/transcriptions", self.transcription)
         upstream.router.add_post("/v1/audio/speech", self.speech)
@@ -46,6 +47,7 @@ class GatewayConfigurationTests(unittest.IsolatedAsyncioTestCase):
             "local_asr_url": str(self.upstream.make_url("/local")),
             "ma_url": str(self.upstream.make_url("/")).rstrip("/"),
             "ma_queue_id": "test-bedroom", "ma_token": "unit-test-ma-key",
+            "local_first": True,
         })
         application = web.Application(middlewares=[gateway.local_only])
         application.on_startup.append(gateway.startup)
@@ -69,7 +71,7 @@ class GatewayConfigurationTests(unittest.IsolatedAsyncioTestCase):
         model = data["model"]
         self.assertTrue(data["file"].file.read().startswith(b"RIFF"))
         self.calls.append(("asr", model, request.headers.get("Authorization")))
-        if model == "custom/failing":
+        if model.startswith("custom/failing"):
             return web.json_response({"error": "unavailable"}, status=503)
         return web.json_response({"text": self.cloud_text})
 
@@ -97,6 +99,8 @@ class GatewayConfigurationTests(unittest.IsolatedAsyncioTestCase):
         self.calls.append(("ma", body, request.headers.get("Authorization")))
         if body["command"] == "player_queues/get":
             return web.json_response({"items": 11, "current_index": 2})
+        if body["command"] == "music/search":
+            return web.json_response({"playlists": self.playlists})
         return web.json_response({})
 
     async def recognize(self):
@@ -140,10 +144,12 @@ class GatewayConfigurationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_uncertain_local_failure_requires_retry(self):
         self.local_text = "放手歌"
-        self.store.update({"asr_model": "custom/failing"})
+        self.store.update({"asr_model": "custom/failing", "asr_fallback_model": "custom/failing-backup"})
         result = await self.recognize()
         self.assertEqual(result["text"], "")
         self.assertIn("error", result)
+        self.assertFalse(result["retryable"])
+        self.assertEqual([c[1] for c in self.calls], ["custom/failing", "custom/failing-backup"])
 
     async def test_configured_fallback_is_used(self):
         self.local_text = "放手歌"
@@ -152,6 +158,14 @@ class GatewayConfigurationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["backend"], "cloud:custom/backup")
         self.assertEqual([c[1] for c in self.calls], ["custom/failing", "custom/backup"])
 
+    async def test_upstream_error_mixed_with_empty_text_does_not_auto_retry(self):
+        self.store.update({"local_first": False, "asr_model": "custom/failing",
+                           "asr_fallback_model": "custom/backup"})
+        self.cloud_text = ""
+        result = await self.recognize()
+        self.assertEqual(result["text"], "")
+        self.assertFalse(result["retryable"])
+
     async def test_empty_or_incomplete_cloud_is_never_executed(self):
         self.local_text = "放手歌"
         for text in ["", "打开我的"]:
@@ -159,6 +173,7 @@ class GatewayConfigurationTests(unittest.IsolatedAsyncioTestCase):
             result = await self.recognize()
             self.assertEqual(result["text"], "")
             self.assertIn("error", result)
+            self.assertTrue(result["retryable"])
 
     async def test_invalid_update_does_not_modify_saved_config(self):
         before = self.store.path.read_bytes()
@@ -188,10 +203,57 @@ class GatewayConfigurationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("another/ASR", (await response.json())["models"])
         response = await self.client.post("/music/control", json={"text": "暂停"})
         self.assertTrue((await response.json())["accepted"])
+        await self.client.server.app["music_jobs"].join()
         commands = [c for c in self.calls if c[0] == "ma"]
         self.assertTrue(commands)
         self.assertTrue(all(c[1]["args"].get("queue_id") == "test-bedroom" for c in commands))
         self.assertTrue(all(c[2] == "Bearer unit-test-ma-key" for c in commands))
+
+    async def test_random_music_selects_playlist_and_shuffles_instead_of_resuming(self):
+        response = await self.client.post("/music/control", json={"text": "随机播放点音乐"})
+        result = await response.json()
+        self.assertTrue(result["accepted"])
+        self.assertEqual(result["operation"], "random")
+        await self.client.server.app["music_jobs"].join()
+        commands = [c[1] for c in self.calls if c[0] == "ma"]
+        self.assertNotIn("players/cmd/play", [c["command"] for c in commands])
+        playback = next(c["args"] for c in commands if c["command"] == "player_queues/play_media")
+        self.assertEqual(playback, {"queue_id": "test-bedroom", "media": self.playlists[0]["uri"],
+                                    "option": "replace", "shuffle": True})
+        repeat = next(c["args"] for c in commands if c["command"] == "player_queues/repeat")
+        self.assertEqual(repeat["repeat_mode"], "off")
+
+    async def test_random_music_search_failure_does_not_replace_current_queue(self):
+        self.playlists = []
+        with self.assertRaises(RuntimeError):
+            await gateway.perform_music(self.client.server.app, "random")
+        self.assertEqual([c[1]["command"] for c in self.calls], ["music/search"])
+
+    async def test_music_explanations_negations_and_named_queries_are_not_generic_random(self):
+        for text in ["随机播放是什么意思", "不要随机播放音乐", "随机播放晴天", "随机播放流行歌曲",
+                     "解释一下暂停", "如果我说暂停会怎样"]:
+            response = await self.client.post("/music/control", json={"text": text, "dry_run": True})
+            self.assertFalse((await response.json())["handled"], text)
+        self.assertEqual(self.calls, [])
+
+    async def test_bare_play_is_complete_but_missing_power_or_song_arguments_are_not(self):
+        self.store.update({"local_first": False})
+        self.cloud_text = "播放"
+        result = await self.recognize()
+        self.assertEqual(result["text"], "播放")
+        self.assertNotIn("error", result)
+        for text in ["打开", "放", "播放周杰伦的"]:
+            self.assertTrue(gateway.is_incomplete_transcription(text), text)
+
+    async def test_music_request_wrappers_reuse_core_grammar_without_cloud_or_execution(self):
+        for text, operation in [("随机播放点音乐", "random"), ("请帮我随机播放点音乐好吗", "random"),
+                                ("麻烦帮我随便放点歌听听", "random"), ("能不能帮我播放吧", "resume"),
+                                ("请给我暂停一下可以吗", "pause"), ("可以帮我切换一下首好吗", "next")]:
+            response = await self.client.post("/music/control", json={"text": text, "dry_run": True})
+            result = await response.json()
+            self.assertEqual(result.get("operation"), operation, text)
+            self.assertFalse(result["executed"])
+        self.assertEqual(self.calls, [])
 
 
 if __name__ == "__main__":

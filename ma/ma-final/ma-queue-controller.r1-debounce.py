@@ -14,6 +14,7 @@ but it can also be something else, hence the loose coupling.
 from __future__ import annotations
 
 import asyncio
+from copy import copy
 import random
 import time
 from typing import TYPE_CHECKING, Any, Final, cast
@@ -1372,12 +1373,42 @@ class PlayerQueuesController(QueueLoaderMixin, PlaybackTrackerMixin, StreamFeede
             if idx >= 10:
                 # we only allow 10 retries to prevent infinite loops
                 raise QueueEmpty("No more (playable) tracks left in the queue.")
+            original_item = queue_item
+            original_media = queue_item.media_item
+            original_session = self._queue_data[queue_id].session_id
+            if (
+                queue_id == "upbac50e55"
+                and queue.flow_mode
+                and queue.current_item
+                and queue_item.queue_item_id == queue.current_item.queue_item_id
+            ):
+                # The next occurrence owns its playback intent. Preloading a repeat
+                # must not reset the metadata of the occurrence still being rendered.
+                queue_item = copy(queue_item)
+                if queue_item.streamdetails:
+                    queue_item.streamdetails = copy(queue_item.streamdetails)
             try:
                 # a repeat plays the item over from the start, not from where it was left off
                 seek_position = (
                     await self._get_resume_position(queue_item) if next_index > cur_index else 0
                 )
                 await self._load_item(queue_item, seek_position=seek_position)
+                if (
+                    queue_item is not original_item
+                    and self._queue_data[queue_id].session_id == original_session
+                    and self.get_item(queue_id, next_index) is original_item
+                    and queue.current_item is original_item
+                    and original_item.media_item is original_media
+                    and queue_item.uri == original_item.uri
+                ):
+                    # Preloading can enrich artwork without replacing active source/quality data.
+                    loaded_media = queue_item.media_item
+                    if original_media and loaded_media:
+                        if not original_media.metadata.images and loaded_media.metadata.images:
+                            original_media.metadata.images = copy(loaded_media.metadata.images)
+                        if original_item.image is None and loaded_media.image:
+                            original_item.image = loaded_media.image
+                            self.signal_update(queue_id, items_changed=True)
                 # we're all set, this is our next item
                 next_item = queue_item
                 break
@@ -1390,6 +1421,12 @@ class PlayerQueuesController(QueueLoaderMixin, PlaybackTrackerMixin, StreamFeede
                     "Skipping unplayable item %s (%s): %s", queue_item.name, queue_item.uri, err
                 )
                 queue_item.available = False
+                if (
+                    queue_item is not original_item
+                    and self._queue_data[queue_id].session_id == original_session
+                    and self.get_item(queue_id, next_index) is original_item
+                ):
+                    original_item.available = False
                 idx += 1
         if idx != 0:
             # we skipped some items, signal a queue items update

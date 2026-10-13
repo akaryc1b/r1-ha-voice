@@ -1,6 +1,6 @@
 {
-  "timeout_guard_rejected": "整轮识别超时至少需 27 秒，请展开“识别速度与分流”调整",
-  "rejected_save_left_configuration_unchanged": true,
-  "desktop_mobile_rendered": true,
-  "page_errors": []
+  "budget_channel_model_loaded": true,
+  "save_refresh_roundtrip": true,
+  "secrets_not_returned": true,
+  "page_errors": 0
 }

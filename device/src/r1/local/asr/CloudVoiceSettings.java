@@ -84,6 +84,34 @@ public final class CloudVoiceSettings {
         settings.put("cloud_tts","cosy".equals(tts));
         if (values.containsKey("voice")) settings.put("cloud_voice",values.get("voice"));
         settings.put("music_ack","true".equals(values.get("music_ack")));
+        if (values.containsKey("asr_retry_once")) {
+            String retry = values.get("asr_retry_once");
+            if (!("true".equals(retry) || "false".equals(retry)))
+                throw new IllegalArgumentException("未听清后续听设置需为开或关");
+            settings.put("asr_retry_once","true".equals(retry));
+        }
+        if (values.containsKey("ai_streaming")) {
+            String streaming = values.get("ai_streaming");
+            if (!("true".equals(streaming) || "false".equals(streaming)))
+                throw new IllegalArgumentException("AI 流式播报设置需为开或关");
+            settings.put("ai_streaming","true".equals(streaming));
+        }
+        String[] budgets = {"ai_first_content_timeout_ms","ai_first_reply_timeout_ms","ai_answer_timeout_ms"};
+        int[] defaults = {4500,8000,30000};
+        int[] limits = {30000,60000,120000};
+        int previous = 0;
+        for (int i=0;i<budgets.length;i++) {
+            int budget = values.containsKey(budgets[i]) ? Integer.parseInt(values.get(budgets[i])) :
+                    settings.optInt(budgets[i],defaults[i]);
+            if (budget < 500 || budget > limits[i] || budget < previous)
+                throw new IllegalArgumentException("AI 超时需满足正文等待 ≤ 首次回答 ≤ 整答，且在允许范围内");
+            settings.put(budgets[i],budget); previous=budget;
+        }
+        if (values.containsKey("speech_stream")) {
+            int stream = Integer.parseInt(values.get("speech_stream"));
+            if (stream != 2 && stream != 9) throw new IllegalArgumentException("不支持这个播报音量通道");
+            settings.put("speech_stream",stream);
+        }
         write(settings);
     }
 
@@ -99,6 +127,12 @@ public final class CloudVoiceSettings {
         result.put("voice",settings.optString("cloud_voice","anna"));
         result.put("music_route",settings.optString("music_route","ha"));
         result.put("music_ack",settings.optBoolean("music_ack",false));
+        result.put("asr_retry_once",settings.optBoolean("asr_retry_once",true));
+        result.put("ai_streaming",settings.optBoolean("ai_streaming",true));
+        result.put("ai_first_content_timeout_ms",settings.optInt("ai_first_content_timeout_ms",4500));
+        result.put("ai_first_reply_timeout_ms",settings.optInt("ai_first_reply_timeout_ms",8000));
+        result.put("ai_answer_timeout_ms",settings.optInt("ai_answer_timeout_ms",30000));
+        result.put("speech_stream",settings.optInt("speech_stream",9));
         result.put("legacy_assistant",false);
         return result;
     }

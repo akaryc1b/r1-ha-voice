@@ -8,5 +8,10 @@
   "cloud_tts": false,
   "cloud_voice": "anna",
   "music_route": "direct",
-  "music_ack": true
+  "music_ack": true,
+  "ai_streaming": true,
+  "ai_first_content_timeout_ms": 4500,
+  "ai_first_reply_timeout_ms": 8000,
+  "ai_answer_timeout_ms": 30000,
+  "speech_stream": 2
 }

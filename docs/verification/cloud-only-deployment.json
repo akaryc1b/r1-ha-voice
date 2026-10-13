@@ -1,0 +1,14 @@
+{
+  "hashes": {
+    "voice_gateway.py": "4fb1ecb1254c76f0eb299b9da9047cb708235177fdd4fdb2d4a40a36a8f1f0a9",
+    "gateway_config.py": "55917abeee78c8488f84cea070723c00dce1a9219d3b57c29e7665eafee5cfcf",
+    "music-commands.json": "552e83b3aad7fbaca0358c5525cee8935696f0500672944d4af14d4bae1ce416"
+  },
+  "gateway_tests": 16,
+  "preemption_tests": 12,
+  "config": {
+    "asr_model": "FunAudioLLM/SenseVoiceSmall",
+    "asr_fallback_model": "TeleAI/TeleSpeechASR",
+    "local_first": false
+  }
+}

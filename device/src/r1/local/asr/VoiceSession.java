@@ -57,7 +57,7 @@ public final class VoiceSession {
 
     }
 
-    public static void newTurn() { TURN.incrementAndGet(); }
+    public static void newTurn() { int turn = TURN.incrementAndGet(); LocalAsr.voiceTurnChanged(turn); VoiceAiStream.cancel(); }
     public static int currentTurn() { return TURN.get(); }
     public static boolean isCurrent(int turn) { return turn == TURN.get(); }
 

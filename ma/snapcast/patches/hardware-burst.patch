@@ -1,0 +1,25 @@
+--- a/de/badaix/snapcast/SnapclientService.smali
++++ b/de/badaix/snapcast/SnapclientService.smali
+@@ -729,16 +729,12 @@
+     goto :goto_65
+ 
+     :cond_5f
+-    const/4 v4, 0x0
+-
+-    .line 241
+-    const-string v3, "*:16:*"
+-
+-    move-object v14, v3
+-
+-    move-object v3, v4
+-
+-    move-object v15, v3
++    # Preserve the hardware burst hint independently from optional resampling.
++    const-string v4, "android.media.property.OUTPUT_FRAMES_PER_BUFFER"
++    invoke-virtual {v3, v4}, Landroid/media/AudioManager;->getProperty(Ljava/lang/String;)Ljava/lang/String;
++    move-result-object v3
++    const-string v14, "*:16:*"
++    const/4 v15, 0x0
+ 
+     :goto_65
+     new-instance v4, Ljava/lang/StringBuilder;

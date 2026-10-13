@@ -1,0 +1,45 @@
+--- a/de/badaix/snapcast/utils/Settings.smali
++++ b/de/badaix/snapcast/utils/Settings.smali
+@@ -77,11 +77,11 @@
+ .end method
+ 
+ .method public getAudioEngine()Ljava/lang/String;
+-    .registers 2
+-
+-    .line 127
+-    const-string v0, "Auto"
+-
++    .registers 3
++    const-string v0, "audioEngine"
++    const-string v1, "Auto"
++    invoke-virtual {p0, v0, v1}, Lde/badaix/snapcast/utils/Settings;->getString(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
++    move-result-object v0
+     return-object v0
+ .end method
+ 
+@@ -447,6 +447,25 @@
+     invoke-virtual {v3, v0, v2}, Lde/badaix/snapcast/utils/Settings;->put(Ljava/lang/String;I)Lde/badaix/snapcast/utils/Settings;
+     const/4 v0, 0x1
+     invoke-virtual {v3, v0}, Lde/badaix/snapcast/utils/Settings;->setAutostart(Z)V
++    # Only the two compiled official engines may be selected by a start intent.
++    const-string v0, "EXTRA_PLAYER"
++    invoke-virtual {p1, v0}, Landroid/content/Intent;->getStringExtra(Ljava/lang/String;)Ljava/lang/String;
++    move-result-object v1
++    const-string v0, "opensl"
++    invoke-virtual {v0, v1}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
++    move-result v2
++    if-eqz v2, :r1_check_oboe
++    const-string v1, "OpenSL"
++    goto :r1_save_player
++    :r1_check_oboe
++    const-string v0, "oboe"
++    invoke-virtual {v0, v1}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
++    move-result v2
++    if-eqz v2, :r1_done
++    const-string v1, "Oboe"
++    :r1_save_player
++    const-string v0, "audioEngine"
++    invoke-virtual {v3, v0, v1}, Lde/badaix/snapcast/utils/Settings;->put(Ljava/lang/String;Ljava/lang/String;)Lde/badaix/snapcast/utils/Settings;
+     :r1_done
+     return-void
+ .end method

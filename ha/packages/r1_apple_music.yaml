@@ -104,6 +104,18 @@ script:
         selector:
           text: null
     sequence:
+    - variables:
+        query_for_guard: "{{ query | trim | regex_replace('^(点|一些|一首|首|个|一点)(儿)?', '') | trim }}"
+    - if: >-
+        {{ query_for_guard | regex_search('^(不要|别|不用|不想)(播放|放|听)')
+           or query_for_guard | regex_search('^(是什么意思|是啥意思|的意思|怎么用|怎么操作|如何使用)[？?。！!]*$')
+           or query_for_guard | regex_search('^(音乐|歌曲|歌|暂停|播放|随机播放|下一首|音量).*(是什么意思|是啥意思|的意思|怎么用|如何使用|怎么操作|会不会|为什么|是什么功能)[？?。！!]*$') }}
+      then:
+      - variables:
+          result:
+            message: 这听起来是在询问或否定音乐操作，我没有开始播放。要点歌请直接说歌名或歌手。
+      - stop: 保留解释与否定请求
+        response_variable: result
     - action: script.turn_off
       target:
         entity_id: script.r1_music_delayed_request
@@ -158,6 +170,23 @@ script:
     - choose:
       - conditions: '{{ tracks | length > 0 }}'
         sequence:
+        - if: "{{ randomize | default(false) | bool }}"
+          then:
+          - action: rest_command.r1_music_api
+            continue_on_error: true
+            data:
+              command: player_queues/repeat
+              args:
+                queue_id: upbac50e55
+                repeat_mode: 'off'
+            response_variable: random_repeat_result
+          - if: "{{ random_repeat_result is not defined or random_repeat_result.status != 200 }}"
+            then:
+            - variables:
+                result:
+                  message: 暂时无法关闭单曲循环，没有开始随机播放，请稍后重试。
+            - stop: 随机播放设置失败
+              response_variable: result
         - action: script.turn_on
           target:
             entity_id: script.r1_music_delayed_request
@@ -168,13 +197,12 @@ script:
                 | map(attribute=''url'') | select(''string'') | list %} {% set ids = (urls[0] if urls else '''') |
                 regex_findall(''/album/[^/]+/([0-9]+)'') %} {{ ids[0] if ids else '''' }}{% endif %}'
               command: player_queues/play_media
-              args:
-                queue_id: upbac50e55
-                media: '{{ tracks[0].uri if is_style else tracks if is_artist else tracks[0] }}'
-                option: replace
+              args: >-
+                {% set play_args = dict(queue_id='upbac50e55', media=(tracks[0].uri if is_style else tracks if is_artist else tracks[0]), option='replace') %}
+                {{ dict(play_args, shuffle=true) if randomize | default(false) | bool else play_args }}
         - variables:
             result:
-              message: 为你播放{{ clean_query if is_artist else tracks[0].name }}。
+              message: 为你{{ '随机播放' if randomize | default(false) | bool else '播放' }}{{ clean_query if is_artist else tracks[0].name }}。
         - stop: 找到歌曲，准备播放
           response_variable: result
     - variables:
@@ -202,12 +230,22 @@ script:
             - next
             - previous
             - first
+            - random
     sequence:
     - condition: template
-      value_template: '{{ operation in [''pause'', ''resume'', ''stop'', ''next'', ''previous'', ''first''] }}'
+      value_template: '{{ operation in [''pause'', ''resume'', ''stop'', ''next'', ''previous'', ''first'', ''random''] }}'
     - action: script.turn_off
       target:
         entity_id: script.r1_music_delayed_request
+    - if: "{{ operation == 'random' }}"
+      then:
+      - action: script.r1_apple_music_play
+        data:
+          query: 流行音乐
+          randomize: true
+        response_variable: result
+      - stop: 随机推荐使用新歌单
+        response_variable: result
     - action: rest_command.r1_music_api
       data:
         command: player_queues/get
@@ -301,6 +339,7 @@ intent_script:
       - action: script.r1_apple_music_play
         data:
           query: "{{ query }}"
+          randomize: "{{ randomize | default(false) | bool }}"
         response_variable: result
       - stop: 返回点歌结果
         response_variable: result

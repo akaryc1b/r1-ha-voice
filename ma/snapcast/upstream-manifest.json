@@ -1,0 +1,149 @@
+{
+  "music_assistant_version": "2.10.6",
+  "music_assistant_source": "https://github.com/music-assistant/server/tree/2.10.6/music_assistant/providers/snapcast",
+  "snapdroid_version": "0.29.0.2",
+  "snapdroid_apk_url": "https://github.com/snapcast/snapdroid/releases/download/v0.29.0.2/Snapcast-signed-v0.29.0.2.apk",
+  "snapdroid_apk_sha256": "cd835c12ae3bf084ef06064333599040559a871fee48e83f3539e89224b40010",
+  "files": [
+    {
+      "name": "constants.py",
+      "upstream_sha256": "7625c25d05951cb978ec43e1369a17b953dda1184a2bd1a53757a50080fc3a73",
+      "patched_sha256": "e9b7fa638679e38810f2121f63e577e504cefe154ed9ab456be2f4453e53b4ca",
+      "url": "https://raw.githubusercontent.com/music-assistant/server/2.10.6/music_assistant/providers/snapcast/constants.py"
+    },
+    {
+      "name": "player.py",
+      "upstream_sha256": "420b82b2a75bd81a43bdb53fdfa2f6cc36d7d70cbf82f528500d80d2783e1898",
+      "patched_sha256": "feef04d6d3d23fe79af326f435f2e044d80b86c914933520171dd502732711d2",
+      "url": "https://raw.githubusercontent.com/music-assistant/server/2.10.6/music_assistant/providers/snapcast/player.py"
+    },
+    {
+      "name": "r1_hardware_volume.py",
+      "upstream_sha256": null,
+      "patched_sha256": "522a070febe7c978ef13ab12e3095e22bcf45e1341d908b718d649129a1c1d6d"
+    }
+  ],
+  "upstream_provider_files": [
+    {
+      "name": "constants.py",
+      "sha256": "7625c25d05951cb978ec43e1369a17b953dda1184a2bd1a53757a50080fc3a73",
+      "url": "https://raw.githubusercontent.com/music-assistant/server/2.10.6/music_assistant/providers/snapcast/constants.py"
+    },
+    {
+      "name": "control.py",
+      "sha256": "f03d319860847d4ee3932e4ebcdeea388fff7cdae7a369a59f7bb2d412d78d44",
+      "url": "https://raw.githubusercontent.com/music-assistant/server/2.10.6/music_assistant/providers/snapcast/control.py"
+    },
+    {
+      "name": "manifest.json",
+      "sha256": "2cbe45b0503a4417999fc8b3b5fd706d9bf74ce9cb2d1c935749542ad4570f69",
+      "url": "https://raw.githubusercontent.com/music-assistant/server/2.10.6/music_assistant/providers/snapcast/manifest.json"
+    },
+    {
+      "name": "ma_stream.py",
+      "sha256": "4729ab8a37b0ff24d92a522bd71d3f10e408d19cff9268ae96127d0f11f650f5",
+      "url": "https://raw.githubusercontent.com/music-assistant/server/2.10.6/music_assistant/providers/snapcast/ma_stream.py"
+    },
+    {
+      "name": "player.py",
+      "sha256": "420b82b2a75bd81a43bdb53fdfa2f6cc36d7d70cbf82f528500d80d2783e1898",
+      "url": "https://raw.githubusercontent.com/music-assistant/server/2.10.6/music_assistant/providers/snapcast/player.py"
+    },
+    {
+      "name": "provider.py",
+      "sha256": "53e2d46e37e0b7cd1ed654a425d0735e75b289077877d9dd94c82e4613499acc",
+      "url": "https://raw.githubusercontent.com/music-assistant/server/2.10.6/music_assistant/providers/snapcast/provider.py"
+    },
+    {
+      "name": "snap_cntrl_proto.py",
+      "sha256": "5c00a613c2b30c851db36e64d83154730ad36e6a37f914dbadb4a6cfa353952a",
+      "url": "https://raw.githubusercontent.com/music-assistant/server/2.10.6/music_assistant/providers/snapcast/snap_cntrl_proto.py"
+    },
+    {
+      "name": "socket_server.py",
+      "sha256": "d405cd938998fa4385386e07ba1d8c1705c0d52cce9a90df9c7b6d0592b3fdc2",
+      "url": "https://raw.githubusercontent.com/music-assistant/server/2.10.6/music_assistant/providers/snapcast/socket_server.py"
+    },
+    {
+      "name": "strings.json",
+      "sha256": "ed16fd498af310fca8f74b2c89748c27842a0e85b5e5595414eea5c4a99c81ae",
+      "url": "https://raw.githubusercontent.com/music-assistant/server/2.10.6/music_assistant/providers/snapcast/strings.json"
+    },
+    {
+      "name": "__init__.py",
+      "sha256": "3951f90eac9b29421c3c015b48e5a35f3160c238537c63148184166bdda59c31",
+      "url": "https://raw.githubusercontent.com/music-assistant/server/2.10.6/music_assistant/providers/snapcast/__init__.py"
+    },
+    {
+      "name": "snapweb/manifest.json",
+      "sha256": "3c0eef76f94e32201fe086468ed6921ff9a7470e43c81ab1173b457887a446f7",
+      "url": "https://raw.githubusercontent.com/music-assistant/server/2.10.6/music_assistant/providers/snapcast/snapweb/manifest.json"
+    }
+  ],
+  "snapdroid_client_source": "https://github.com/snapcast/snapdroid/blob/v0.29.0.2/Snapcast/src/main/java/de/badaix/snapcast/SnapclientService.java",
+  "snapclient_oboe_source": "https://github.com/badaix/snapcast/blob/v0.29.0/client/player/oboe_player.cpp",
+  "snapdroid_build_script_sha256": "48be22b4e53d2c3ae4b444767cb79c5ef8327958d11296fa28daeafcacbba846",
+  "hardware_burst_patch_sha256": "423c0a8a887abba078c6cf3d2f949deba2682600d66f4bbd733a9d432ab53841",
+  "hardware_burst_ab": {
+    "diagnostic_before_apk_sha256": "ec9bc3f23ebba5ad22cd5d848f32449743ad254c55c1189aba9cfec834bd9e32",
+    "diagnostic_after_apk_sha256": "feda7daee2ece21061fd447b59615154b1980f808f4a81fb4afb84163f6909a4",
+    "frames_per_burst_before": 192,
+    "frames_per_burst_after": 1024,
+    "oboe_buffer_frames_before": 384,
+    "oboe_buffer_frames_after": 2048,
+    "hard_sync_30s_before": 61,
+    "hard_sync_30s_after": 5,
+    "native_log_default": false,
+    "transport_sampleformat": "44100:16:2",
+    "transport_codec": "flac",
+    "server_buffer_ms": 500,
+    "acoustic_fixed_confirmed": false
+  },
+  "public_builder_verification": {
+    "default_native_log": false,
+    "default_output_sha256": "7413a15e61f026e31a03abe3515f4a2849209b66e5845c6482b7238039943011",
+    "diagnostic_output_sha256": "f92b28168a7c719713ccb660358e1fbbb51fc9d5f5726617cfd67b7f7459382f",
+    "apk_changed_entries": [
+      "classes.dex"
+    ],
+    "v1_v2_v3_signature_verification": true,
+    "player_preference_enabled": true,
+    "installed": false
+  },
+  "optional_native_log_patch_sha256": "e704ef67b8fb09af489c928270aaeecc0ba826358672521ba20c51d20a6c5aff",
+  "player_preference_patch_sha256": "db8576271bd15b356e0da870a5332d3683eb90be2ec8705fc65e4dc4ebad4438",
+  "persist_start_smali_sha256": "2f83b350f5164dcf36825c8709b91c6dcc0e5b8f98b30926c11b9599c8a102bf",
+  "player_intent": {
+    "extra": "EXTRA_PLAYER",
+    "allowed": [
+      "oboe",
+      "opensl"
+    ],
+    "requires_persist": true,
+    "restores_upstream_preference_getter": true
+  },
+  "player_engine_trial": {
+    "installed_candidate_sha256": "11ecf428b5b92201aa9b7e044723c8d5e1d8921446dd7cbcfdbc5287a198f83d",
+    "opensl_startup_succeeded": false,
+    "opensl_failure": "EngineObject::GetInterface: SL_RESULT_PARAMETER_INVALID(2)",
+    "rollback_engine": "oboe",
+    "rollback_frames_per_burst": 1024,
+    "rollback_native_instances": 1,
+    "rollback_active_output_tracks": 1,
+    "rollback_hard_sync_30s": 2,
+    "rollback_partial_chunk_exceptions_30s": 1,
+    "rollback_underrun_increase_30s": 0,
+    "acoustic_clean_confirmed": true,
+    "acoustic_evidence": "User confirmed normal playback without crackling after rollback to oboe with hardware burst 1024",
+    "music_parameters_frozen_after_acceptance": true
+  },
+  "current_installed_client": {
+    "sha256": "11ecf428b5b92201aa9b7e044723c8d5e1d8921446dd7cbcfdbc5287a198f83d",
+    "player_preference": "oboe",
+    "frames_per_burst": 1024,
+    "sampleformat": "44100:16:2",
+    "codec": "flac",
+    "server_buffer_ms": 500,
+    "native_log": true
+  }
+}

@@ -88,26 +88,67 @@
                  return
 --- a/controllers/player_queues/queue_loader.py
 +++ b/controllers/player_queues/queue_loader.py
-@@ -9,6 +9,8 @@
- # ruff: noqa: PLR0915
+@@ -10,11 +10,16 @@
  
  from __future__ import annotations
-+
-+import time
  
++import asyncio
++import time
++
  import random
  from contextlib import suppress
-@@ -307,6 +309,9 @@
+ from typing import TYPE_CHECKING, cast
+ 
+ from music_assistant_models.enums import (
++    ContentType,
++    EventType,
+     MediaType,
+     PlaybackState,
+     QueueOption,
+@@ -307,6 +312,12 @@
          """
          queue_id = queue_item.queue_id
          queue = self._queue_data[queue_id].queue
++        deferred_artwork: Track | None = None
++        if is_start and queue_id == "upbac50e55":
++            self.mass.cancel_task(f"r1_artwork_{queue_id}")
 +        r1_started=time.monotonic()
 +        r1_abort=0.0
 +        r1_buffer=0.0
  
          # we use a contextvar to bypass the throttler for this asyncio task/context
          # this makes sure that playback has priority over other requests that may be
-@@ -371,9 +376,11 @@
+@@ -336,16 +347,20 @@
+             ):
+                 # Youtube Music has poor thumbs by default, so we always fetch the full item
+                 # this also catches the case where they have an unavailable item in a listing
+-                try:
+-                    fetched_item = await self.mass.music.get_item_by_uri(queue_item.uri)
+-                except (ResourceTemporarilyUnavailable, RetriesExhausted) as err:
+-                    self.logger.warning(
+-                        "Could not fetch full details of %s, playing it as listed: %s",
+-                        queue_item.uri,
+-                        err,
+-                    )
++                if self._can_defer_r1_artwork(queue_item, is_start):
++                    deferred_artwork = queue_item.media_item
++                    self.logger.info("R1_ARTWORK_DEFER full_lookup=background")
+                 else:
+-                    queue_item.media_item = cast("Track", fetched_item)
++                    try:
++                        fetched_item = await self.mass.music.get_item_by_uri(queue_item.uri)
++                    except (ResourceTemporarilyUnavailable, RetriesExhausted) as err:
++                        self.logger.warning(
++                            "Could not fetch full details of %s, playing it as listed: %s",
++                            queue_item.uri,
++                            err,
++                        )
++                    else:
++                        queue_item.media_item = cast("Track", fetched_item)
+ 
+             # ensure we got the full (original) album set
+             if album and (
+@@ -371,9 +386,11 @@
          # decided once the album above is resolved: a queue item can hold a slim mapping of its
          # album, which carries none of the provider ids the enqueued album is matched on
          playing_album_tracks = self._plays_as_album_track(queue_item)
@@ -119,7 +160,7 @@
  
          # Fetch streamdetails (reuses existing if buffer is still valid for the seek).
          queue_item.streamdetails = await self.mass.streams.audio.get_stream_details(
-@@ -382,6 +389,7 @@
+@@ -382,6 +399,7 @@
              fade_in=fade_in,
              prefer_album_loudness=playing_album_tracks,
          )
@@ -127,15 +168,121 @@
          # update queue_item.duration from streamdetails if we got a better value
          self._apply_probed_duration(queue_item)
  
-@@ -399,6 +407,11 @@
+@@ -399,6 +417,117 @@
              # the first chunk is in, so the source has been probed and a duration the
              # provider did not report is known before playback starts
              self._apply_probed_duration(queue_item)
++
++        if (
++            deferred_artwork is not None
++            and not deferred_artwork.image
++            and queue_item.streamdetails.media_type != MediaType.AUDIO_SOURCE
++            # Repeat-one's existing preload fetches this same item's full metadata.
++            and queue.repeat_mode != RepeatMode.ONE
++        ):
++            self.mass.create_task(
++                self._refresh_r1_artwork,
++                queue_item,
++                deferred_artwork,
++                task_id=f"r1_artwork_{queue_id}",
++                abort_existing=True,
++                eager_start=False,
++            )
 +
 +        if queue_id == "upbac50e55" and is_start:
 +            self.logger.info("R1_LOAD_TIMING metadata=%.3f abort=%.3f details=%.3f buffer=%.3f total=%.3f",
 +                r1_metadata-r1_started,r1_abort-r1_metadata,r1_details-r1_abort,
 +                time.monotonic()-r1_details,time.monotonic()-r1_started)
++
++    @staticmethod
++    def _can_defer_r1_artwork(queue_item: QueueItem, is_start: bool) -> bool:
++        """Only a complete single-Apple AAC listing can start without artwork enrichment."""
++        item = queue_item.media_item
++        if (
++            not is_start
++            or queue_item.queue_id != "upbac50e55"
++            or not queue_item.available
++            or not isinstance(item, Track)
++            or not item.item_id
++            or not item.name
++            or not item.duration
++            or item.duration <= 0
++            or len(item.provider_mappings) != 1
++        ):
++            return False
++        mapping = next(iter(item.provider_mappings))
++        audio = mapping.audio_format
++        return (
++            mapping.provider_domain == "apple_music"
++            and bool(mapping.provider_instance)
++            and item.provider in ("apple_music", mapping.provider_instance)
++            and mapping.item_id == item.item_id
++            and mapping.available
++            and audio.content_type == ContentType.AAC
++            and audio.sample_rate == 44100
++            and audio.bit_depth == 16
++            and audio.channels == 2
++        )
++
++    async def _refresh_r1_artwork(self, queue_item: QueueItem, item: Track) -> None:
++        """Bound optional artwork work to the current playing item and queue session."""
++        queue_id = queue_item.queue_id
++        queue_data = self._queue_data.get(queue_id)
++        if queue_data is None or (session_id := queue_data.session_id) is None:
++            return
++        task = asyncio.current_task()
++        assert task is not None
++        ready = asyncio.Event()
++
++        def still_current() -> bool:
++            return (
++                self._queue_data.get(queue_id) is queue_data
++                and queue_data.session_id == session_id
++                and queue_data.queue.repeat_mode != RepeatMode.ONE
++                and queue_data.queue.current_item is queue_item
++                and self.get_item(queue_id, queue_item.queue_item_id) is queue_item
++                and queue_item.media_item is item
++            )
++
++        def queue_changed(_event: object = None) -> None:
++            if not still_current() or (
++                ready.is_set() and queue_data.queue.state == PlaybackState.IDLE
++            ):
++                task.cancel()
++            elif queue_data.queue.state in (PlaybackState.PLAYING, PlaybackState.PAUSED):
++                ready.set()
++
++        unsubscribe = self.mass.subscribe(
++            queue_changed,
++            (EventType.QUEUE_UPDATED, EventType.QUEUE_ITEMS_UPDATED),
++            queue_id,
++        )
++        try:
++            queue_changed()
++            # play_index publishes the new item after _load_item returns; wait for playback.
++            await asyncio.wait_for(ready.wait(), timeout=8)
++            BYPASS_THROTTLER.set(False)
++            fetched = await asyncio.wait_for(
++                self.mass.music.get_item_by_uri(queue_item.uri), timeout=8
++            )
++            if not still_current() or queue_data.queue.state == PlaybackState.IDLE:
++                return
++            if not isinstance(fetched, Track) or not compare_item_ids(item, fetched):
++                return
++            # Preserve playback identity, quality mappings, album and any artwork added meanwhile.
++            images = UniqueList(item.metadata.images or [])
++            if fetched.image:
++                images.append(fetched.image)
++            images.extend(fetched.metadata.images or [])
++            if images and images != item.metadata.images:
++                item.metadata.images = images
++                if queue_item.image is None:
++                    queue_item.image = item.image
++                self.signal_update(queue_id, items_changed=True)
++        except (MusicAssistantError, asyncio.TimeoutError) as err:
++            self.logger.debug("R1 artwork refresh unavailable: %s", type(err).__name__)
++        finally:
++            unsubscribe()
  
      def _plays_as_album_track(self, queue_item: QueueItem) -> bool:
          """
@@ -173,10 +320,99 @@
          # same registry as the single-item route: a forced-flow player (overlay)
 --- a/controllers/streams/audio.py
 +++ b/controllers/streams/audio.py
-@@ -3863,6 +3863,18 @@
+@@ -346,6 +346,26 @@
+         overshoot.extend(next_chunk[remaining:])
+         taken += len(part)
+         yield part
++
++
++class _FlowPlayLogEntry(PlayLogEntry):
++    """Keep the metadata owned by this flow occurrence, including fade corrections."""
++
++    __slots__ = ("streamdetails", "playback_speed", "seek_position")
++
++    def __init__(
++        self, queue_item_id: str, streamdetails: StreamDetails, playback_speed: float
++    ) -> None:
++        super().__init__(queue_item_id)
++        self.streamdetails = streamdetails
++        self.playback_speed = playback_speed
++        self.seek_position = streamdetails.seek_position
++
++    def finish(self) -> None:
++        """Keep final progress without retaining completed source buffers."""
++        if self.streamdetails is not None:
++            self.seek_position = self.streamdetails.seek_position
++            self.streamdetails = None
+ 
+ 
+ class _IncomingFadePrefetcher:
+@@ -2400,6 +2420,16 @@
+                         queue.display_name,
+                     )
+                     continue
++                if queue.queue_id == "upbac50e55":
++                    if _superseded():
++                        return
++                    central_item = self.mass.player_queues.get_item(
++                        queue.queue_id, queue_track.queue_item_id
++                    )
++                    if central_item is not None and central_item is not queue_track:
++                        # The repeat now owns the queue's active buffer. Earlier playlog
++                        # entries retain their own metadata while stop sees this buffer.
++                        central_item.streamdetails = queue_track.streamdetails
+                 # re-read the effective crossfade settings so a change applies at the
+                 # next track transition instead of the next stream session; a realtime
+                 # source still gets its fade decided from what its boundary can
+@@ -2558,7 +2588,15 @@
+                     overlay_enabled=overlay_active(queue),
+                 )
+                 # append to play log so the queue controller can work out which track is playing
+-                play_log_entry = PlayLogEntry(queue_track.queue_item_id)
++                play_log_entry = (
++                    _FlowPlayLogEntry(
++                        queue_track.queue_item_id,
++                        queue_track.streamdetails,
++                        float(queue_track.extra_attributes.get("playback_speed") or 1.0),
++                    )
++                    if queue.queue_id == "upbac50e55"
++                    else PlayLogEntry(queue_track.queue_item_id)
++                )
+                 flow_log.append(play_log_entry)
+ 
+                 bytes_written = 0
+@@ -2820,6 +2858,8 @@
+                     if last_fadeout_part:
+                         # crossfade into this item never happened — undo the eager seek_position
+                         queue_track.streamdetails.seek_position = raw_seek_position
++                    if isinstance(play_log_entry, _FlowPlayLogEntry):
++                        play_log_entry.finish()
+                     continue
+ 
+                 #### HANDLE END OF TRACK
+@@ -2834,6 +2874,8 @@
+                     play_log_entry.seconds_streamed = 0
+                     if last_fadeout_part:
+                         queue_track.streamdetails.seek_position = raw_seek_position
++                    if isinstance(play_log_entry, _FlowPlayLogEntry):
++                        play_log_entry.finish()
+                     continue
+                 if last_fadeout_part:
+                     # edge case: we did not get enough data to make the crossfade
+@@ -2877,6 +2919,8 @@
+                 seconds_streamed = bytes_written / pcm_sample_size
+                 queue_track.streamdetails.seconds_streamed = seconds_streamed
+                 play_log_entry.seconds_streamed = seconds_streamed
++                if isinstance(play_log_entry, _FlowPlayLogEntry):
++                    play_log_entry.finish()
+                 # an externally aborted source ends in a clean EOF mid-track, so the
+                 # streamed length must not be written back as the item's duration
+                 source_buffer = queue_track.streamdetails.buffer
+@@ -3862,6 +3906,18 @@
+             and "-readrate" not in extra_input_args
          ):
              extra_input_args += ["-readrate", "1", "-readrate_initial_burst", "0.5"]
- 
++
 +        # Apple catalog MP4 is fragmented with its initialization box at the head.
 +        # Sequential reads avoid scanning every remote fragment before first PCM.
 +        # Real source seeks retain normal HTTP range support.
@@ -188,11 +424,10 @@
 +            and "-seekable" not in extra_input_args
 +        ):
 +            extra_input_args += ["-seekable", "0"]
-+
+ 
          # handle seek support
          if seek_position and streamdetails.duration and streamdetails.allow_seek:
-             extra_input_args += ["-ss", str(int(seek_position))]
-@@ -3940,6 +3952,13 @@
+@@ -3940,6 +3996,13 @@
                          mass.loop.time() - stream_start,
                          ffmpeg_proc.input_format.codec_type,
                      )
@@ -208,7 +443,15 @@
  
 --- a/controllers/player_queues/controller.py
 +++ b/controllers/player_queues/controller.py
-@@ -797,7 +797,7 @@
+@@ -14,6 +14,7 @@
+ from __future__ import annotations
+ 
+ import asyncio
++from copy import copy
+ import random
+ import time
+ from typing import TYPE_CHECKING, Any, Final, cast
+@@ -797,7 +798,7 @@
  
          # debounce rapid next button presses using call_later
          self.mass.call_later(
@@ -217,7 +460,7 @@
              self.play_index,
              queue_id,
              next_index,
-@@ -836,7 +836,7 @@
+@@ -836,7 +837,7 @@
  
          # debounce rapid previous button presses using call_later
          self.mass.call_later(
@@ -226,3 +469,93 @@
              self.play_index,
              queue_id,
              prev_index,
+@@ -1372,12 +1373,42 @@
+             if idx >= 10:
+                 # we only allow 10 retries to prevent infinite loops
+                 raise QueueEmpty("No more (playable) tracks left in the queue.")
++            original_item = queue_item
++            original_media = queue_item.media_item
++            original_session = self._queue_data[queue_id].session_id
++            if (
++                queue_id == "upbac50e55"
++                and queue.flow_mode
++                and queue.current_item
++                and queue_item.queue_item_id == queue.current_item.queue_item_id
++            ):
++                # The next occurrence owns its playback intent. Preloading a repeat
++                # must not reset the metadata of the occurrence still being rendered.
++                queue_item = copy(queue_item)
++                if queue_item.streamdetails:
++                    queue_item.streamdetails = copy(queue_item.streamdetails)
+             try:
+                 # a repeat plays the item over from the start, not from where it was left off
+                 seek_position = (
+                     await self._get_resume_position(queue_item) if next_index > cur_index else 0
+                 )
+                 await self._load_item(queue_item, seek_position=seek_position)
++                if (
++                    queue_item is not original_item
++                    and self._queue_data[queue_id].session_id == original_session
++                    and self.get_item(queue_id, next_index) is original_item
++                    and queue.current_item is original_item
++                    and original_item.media_item is original_media
++                    and queue_item.uri == original_item.uri
++                ):
++                    # Preloading can enrich artwork without replacing active source/quality data.
++                    loaded_media = queue_item.media_item
++                    if original_media and loaded_media:
++                        if not original_media.metadata.images and loaded_media.metadata.images:
++                            original_media.metadata.images = copy(loaded_media.metadata.images)
++                        if original_item.image is None and loaded_media.image:
++                            original_item.image = loaded_media.image
++                            self.signal_update(queue_id, items_changed=True)
+                 # we're all set, this is our next item
+                 next_item = queue_item
+                 break
+@@ -1390,6 +1421,12 @@
+                     "Skipping unplayable item %s (%s): %s", queue_item.name, queue_item.uri, err
+                 )
+                 queue_item.available = False
++                if (
++                    queue_item is not original_item
++                    and self._queue_data[queue_id].session_id == original_session
++                    and self.get_item(queue_id, next_index) is original_item
++                ):
++                    original_item.available = False
+                 idx += 1
+         if idx != 0:
+             # we skipped some items, signal a queue items update
+--- a/controllers/player_queues/playback_tracker.py
++++ b/controllers/player_queues/playback_tracker.py
+@@ -362,18 +362,25 @@
+                 # account for any seeking by adding the skipped/seeked seconds
+                 queue_index = self.index_by_id(queue.queue_id, play_log_entry.queue_item_id)
+                 queue_item = self.get_item(queue.queue_id, queue_index)
+-                if queue_item and queue_item.streamdetails:
++                occurrence_details = getattr(play_log_entry, "streamdetails", None)
++                if occurrence_details is not None:
++                    track_sec_skipped = occurrence_details.seek_position
++                elif hasattr(play_log_entry, "seek_position"):
++                    track_sec_skipped = play_log_entry.seek_position
++                elif queue_item and queue_item.streamdetails:
+                     track_sec_skipped = queue_item.streamdetails.seek_position
+                 else:
+                     track_sec_skipped = 0
+                 # stream-time within this entry, scaled to media-time using the
+                 # speed of the entry we broke on (queue.current_item may still be
+                 # the previous entry during a transition)
+-                entry_speed = (
+-                    float(queue_item.extra_attributes.get("playback_speed") or 1.0)
+-                    if queue_item
+-                    else 1.0
+-                )
++                entry_speed = getattr(play_log_entry, "playback_speed", None)
++                if entry_speed is None:
++                    entry_speed = (
++                        float(queue_item.extra_attributes.get("playback_speed") or 1.0)
++                        if queue_item
++                        else 1.0
++                    )
+                 stream_pos_in_item = elapsed_time_queue_total - played_time
+                 track_time = track_sec_skipped + stream_pos_in_item * entry_speed
+                 break

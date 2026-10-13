@@ -10,11 +10,21 @@ ROOT=Path(__file__).resolve().parent
 SETTINGS=GatewayConfig(ROOT)
 LOG=logging.getLogger('r1-cloud-voice')
 CACHE={}
-MUSIC_COMMANDS=json.loads((ROOT/'music-commands.json').read_text())
+MUSIC_COMMANDS=json.loads((ROOT/'music-commands.json').read_text(encoding='utf-8'))
 ASR_RETRY_MESSAGE='没有听清，请再说一遍。'
 
 class CloudAsrUnavailable(Exception):
     """云端没有确认识别结果，禁止回退执行本地猜测。"""
+    def __init__(self,retryable=False):
+        super().__init__()
+        self.retryable=retryable
+
+class CloudAsrRejected(RuntimeError):
+    """只保留可公开的失败分类；不保存云端正文或请求凭据。"""
+    def __init__(self,kind,status=0):
+        super().__init__(kind)
+        self.kind=kind
+        self.status=status
 
 async def transcribe_cloud(session,audio,primary=None,settings=None):
     """按当前配置选择模型与超时；所有云端尝试失败后要求重说。"""
@@ -24,7 +34,9 @@ async def transcribe_cloud(session,audio,primary=None,settings=None):
     fallback=config['asr_fallback_model']
     if fallback and fallback!=primary:
         attempts.append((fallback,config['asr_fallback_timeout_seconds']))
+    failure_kinds=[]
     for model,budget in attempts:
+        started=time.monotonic()
         try:
             form=aiohttp.FormData()
             form.add_field('model',model)
@@ -32,27 +44,48 @@ async def transcribe_cloud(session,audio,primary=None,settings=None):
             headers={'Authorization':'Bearer '+config['asr_api_key']} if config['asr_api_key'] else {}
             async with session.post(config['asr_base_url']+'/audio/transcriptions',data=form,
                     headers=headers,timeout=aiohttp.ClientTimeout(total=budget,connect=1.5)) as response:
-                if response.status!=200:raise RuntimeError('HTTP '+str(response.status))
+                if response.status!=200:raise CloudAsrRejected('http_status',response.status)
                 result=await response.json()
             text=result.get('text','').strip()
-            if not text:raise RuntimeError('Empty transcription')
+            if not text:raise CloudAsrRejected('empty_text')
             backend={'TeleAI/TeleSpeechASR':'telespeech',
                 'FunAudioLLM/SenseVoiceSmall':'sensevoice',
                 'XingChenAGI/XingChenGSR-V1.0':'xingchen-gsr'}.get(model,'cloud:'+model)
             return text,backend
         except (aiohttp.ClientError,asyncio.TimeoutError,RuntimeError,ValueError,TypeError,AttributeError) as exc:
-            LOG.warning('ASR model=%s failed=%s',model,type(exc).__name__)
-    raise CloudAsrUnavailable()
+            kind=(exc.kind if isinstance(exc,CloudAsrRejected) else
+                'timeout' if isinstance(exc,asyncio.TimeoutError) else
+                'invalid_response' if isinstance(exc,(ValueError,TypeError,AttributeError,aiohttp.ContentTypeError)) else
+                'transport' if isinstance(exc,aiohttp.ClientError) else 'runtime')
+            failure_kinds.append(kind)
+            LOG.warning('ASR model=%s failed=%s kind=%s status=%d elapsed_ms=%d',
+                model,type(exc).__name__,kind,getattr(exc,'status',0),
+                round((time.monotonic()-started)*1000))
+    raise CloudAsrUnavailable(bool(failure_kinds) and all(kind=='empty_text' for kind in failure_kinds))
 
 async def startup(app):
     app['music_jobs']=asyncio.Queue(maxsize=4)
+    app['music_generation']=0
+    app['music_interrupt']=asyncio.Event()
+    app['music_tasks']=set()
+    app['music_active_task']=None
+    app['music_stopping']=False
     app['music_last_error']=''
     app['http']=aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=12,connect=1.5),connector=aiohttp.TCPConnector(ttl_dns_cache=600,keepalive_timeout=90),trust_env=False)
     app['music_worker']=asyncio.create_task(music_worker(app))
 async def cleanup(app):
+    app['music_stopping']=True
+    app['music_generation']+=1
+    app['music_interrupt'].set()
     app['music_worker'].cancel()
-    await asyncio.gather(app['music_worker'],return_exceptions=True)
-    await app['http'].close()
+    tasks=tuple(app['music_tasks'])
+    for task in tasks:task.cancel()
+    while not app['music_jobs'].empty():
+        app['music_jobs'].get_nowait();app['music_jobs'].task_done()
+    try:
+        await asyncio.gather(app['music_worker'],*tasks,return_exceptions=True)
+    finally:
+        await app['http'].close()
 @web.middleware
 async def local_only(request,handler):
     if request.remote not in SETTINGS.snapshot()['allowed_clients']:
@@ -75,12 +108,21 @@ def normalize_command(text):
         return text
     return re.sub(r'温[师失尸]度','温湿度',text)
 
+def match_music_operation(text):
+    """复用可生成的核心句式；请求前后缀只解析一次，避免枚举组合。"""
+    clean=normalize_command(text).strip('，。！？、,.!? ').replace(' ','')
+    operation=MUSIC_COMMANDS.get(clean)
+    if operation:return operation
+    clean=re.sub(r'^(麻烦帮我|请帮我|请给我|能不能帮我|可以帮我|能不能|帮我|给我|麻烦|请|帮忙)','',clean,count=1)
+    clean=re.sub(r'(可以吗|听听|好吗|行吗|吧)$','',clean,count=1)
+    return MUSIC_COMMANDS.get(clean)
+
 def is_fast_control(text):
     clean=text.strip().strip('，。！？、,.!? ')
     clean=re.sub(r'^(麻烦帮我|请帮我|请给我|能不能帮我|可以帮我|能不能|帮我|给我|告诉我|麻烦|请|帮忙|报一下|播报一下|查询一下|查询|查一下|看一下|读一下|问一下)','',clean,count=1)
     clean=re.sub(r'(好吗|可以吗|行吗|听听|吧|啊|呀|呢)$','',clean,count=1)
     if clean in {'几点了','现在几点了','今天几号','今天是几号','今天星期几','今天是星期几','今天周几','现在星期几'}:return True
-    if clean.replace(' ','') in MUSIC_COMMANDS:return True
+    if match_music_operation(text):return True
     if clean in {
         '暂停','暂停一下','暂停音乐','暂停播放','暂停播放音乐','先暂停','先停一下','先别放了',
         '继续','继续播放','继续音乐','继续播放音乐','接着放','接着播放',
@@ -120,6 +162,8 @@ def is_clear_local_control(text,max_chars=12):
 
 def is_incomplete_transcription(text):
     clean=text.strip().strip('，。！？、,.!? ')
+    # 播放器上下文的“播放”是完整操作，不能被通用动词缺参保护误拒绝。
+    if match_music_operation(text):return False
     clean=re.sub(r'^(麻烦帮我|请帮我|请给我|帮我|给我|麻烦|请)','',clean,count=1)
     return (not clean or clean in {'播放','放','打开','关闭','设置','调整','调到','音量','声音','帮我','给我'}
         or bool(re.fullmatch(r'(播放|放|打开|关闭|设置|调整).+的',clean)))
@@ -156,16 +200,16 @@ async def recognize(request):
                 else:
                     try:
                         text,backend=await transcribe_cloud(session,wav_bytes(chunks),primary,config)
-                    except CloudAsrUnavailable:
+                    except CloudAsrUnavailable as error:
                         LOG.warning('ASR retry_required reason=cloud_unavailable')
                         if not ws.closed:
-                            await ws.send_json({'text':'','is_final':True,'error':ASR_RETRY_MESSAGE})
+                            await ws.send_json({'text':'','is_final':True,'error':ASR_RETRY_MESSAGE,'retryable':error.retryable})
                             await ws.send_str('Done!')
                         return
                 if is_incomplete_transcription(text):
                     LOG.info('ASR retry_required reason=incomplete_transcription')
                     if not ws.closed:
-                        await ws.send_json({'text':'','is_final':True,'error':ASR_RETRY_MESSAGE})
+                        await ws.send_json({'text':'','is_final':True,'error':ASR_RETRY_MESSAGE,'retryable':True})
                         await ws.send_str('Done!')
                     return
                 text=normalize_command(text)
@@ -197,7 +241,7 @@ async def recognize(request):
     except (aiohttp.ClientError,asyncio.TimeoutError) as exc:
         LOG.warning('ASR session ended cause=%s',type(exc).__name__)
         if not ws.closed:
-            await ws.send_json({'text':'','is_final':True,'error':ASR_RETRY_MESSAGE})
+            await ws.send_json({'text':'','is_final':True,'error':ASR_RETRY_MESSAGE,'retryable':False})
             await ws.send_str('Done!')
     finally:await ws.close()
     return ws
@@ -212,27 +256,52 @@ async def ma_request(app,command,args):
         if response.status!=200:raise RuntimeError('Music Assistant HTTP '+str(response.status))
         return await response.json()
 
-async def perform_music(app,operation):
-    queue=await ma_request(app,'player_queues/get',{'queue_id':SETTINGS.snapshot()['ma_queue_id']})
+async def perform_music(app,operation,generation=None):
+    async def current_request(command,args):
+        # Cancellation cannot retract an MA request already sent. Fence every
+        # request boundary so a superseded preparation cannot submit another one.
+        def check_current():
+            if generation is not None and generation!=app['music_generation']:
+                raise asyncio.CancelledError()
+        check_current()
+        result=await ma_request(app,command,args)
+        check_current()
+        return result
+    queue_id=SETTINGS.snapshot()['ma_queue_id']
+    if operation in {'pause','stop'}:
+        await current_request('player_queues/'+operation,{'queue_id':queue_id})
+        return
+    if operation=='random':
+        # 随机听歌选择完整歌单，不能把一首歌的旧队列当成随机推荐。
+        result=await current_request('music/search',{'search_query':'国语流行',
+            'media_types':['playlist'],'limit':1,'providers':['apple_music']})
+        playlists=result.get('playlists') or []
+        if not playlists or not playlists[0].get('uri'):raise RuntimeError('No music playlist')
+        await current_request('player_queues/repeat',{'queue_id':queue_id,'repeat_mode':'off'})
+        await current_request('player_queues/play_media',{'queue_id':queue_id,
+            'media':playlists[0]['uri'],'option':'replace','shuffle':True})
+        return
+    queue=await current_request('player_queues/get',{'queue_id':queue_id})
     count=int(queue.get('items') or 0);index=int(queue.get('current_index') or 0)
     if operation in {'first','next','previous'}:
         if not count or operation=='next' and index+1>=count:raise RuntimeError('Queue boundary')
         target=0 if operation=='first' else index+1 if operation=='next' else max(0,index-1)
-        await ma_request(app,'player_queues/play_index',{'queue_id':SETTINGS.snapshot()['ma_queue_id'],'index':target})
+        await current_request('player_queues/play_index',{'queue_id':queue_id,'index':target})
     elif operation=='resume':
-        await ma_request(app,'players/cmd/play',{'player_id':SETTINGS.snapshot()['ma_queue_id']})
+        await current_request('players/cmd/play',{'player_id':queue_id})
     else:
-        await ma_request(app,'player_queues/'+operation,{'queue_id':SETTINGS.snapshot()['ma_queue_id']})
+        await current_request('player_queues/'+operation,{'queue_id':queue_id})
 
 async def music_worker(app):
-    while True:
-        operation,turn=await app['music_jobs'].get()
+    async def run_job(operation,turn,generation):
         started=time.monotonic()
         try:
-            await perform_music(app,operation)
+            await perform_music(app,operation,generation)
+            if generation!=app['music_generation']:return
             app['music_last_error']=''
             LOG.info('MUSIC_DIRECT operation=%s seconds=%.3f',operation,time.monotonic()-started)
         except (aiohttp.ClientError,asyncio.TimeoutError,RuntimeError,ValueError,TypeError) as error:
+            if generation!=app['music_generation']:return
             app['music_last_error']='音乐指令未能完成，请稍后再试。'
             LOG.warning('MUSIC_DIRECT failed=%s',type(error).__name__)
             if turn:
@@ -242,29 +311,64 @@ async def music_worker(app):
                             timeout=aiohttp.ClientTimeout(total=3)) as response:
                         await response.read()
                 except (aiohttp.ClientError,asyncio.TimeoutError):pass
-        finally:app['music_jobs'].task_done()
+    def job_done(task,generation):
+        app['music_tasks'].discard(task)
+        if not task.cancelled() and (error:=task.exception()) is not None:
+            LOG.warning('MUSIC_DIRECT task failed=%s',type(error).__name__)
+            if generation==app['music_generation']:
+                app['music_last_error']='音乐指令未能完成，请稍后再试。'
+    while True:
+        operation,turn,generation=await app['music_jobs'].get()
+        task=None;interrupted=None
+        try:
+            if generation!=app['music_generation']:continue
+            app['music_interrupt'].clear()
+            task=asyncio.create_task(run_job(operation,turn,generation))
+            app['music_tasks'].add(task)
+            task.add_done_callback(lambda done,g=generation:job_done(done,g))
+            app['music_active_task']=task
+            interrupted=asyncio.create_task(app['music_interrupt'].wait())
+            await asyncio.wait({task,interrupted},return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            # Do not await a superseded HTTP task here: pause/stop must not wait
+            # for an old search to return. Tracked tasks are joined on cleanup.
+            if task is not None and not task.done():task.cancel()
+            if interrupted is not None:
+                interrupted.cancel()
+                await asyncio.gather(interrupted,return_exceptions=True)
+            if app['music_active_task'] is task:app['music_active_task']=None
+            app['music_jobs'].task_done()
 
 async def music_control(request):
     try:
         data=await request.json()
         text=normalize_command(str(data.get('text','')).strip()).strip('，。！？、,.!? ')
         if len(text)>160:raise ValueError('Command too long')
-        operation=MUSIC_COMMANDS.get(text.replace(' ',''))
+        operation=match_music_operation(text)
         if operation is None:return web.json_response({'handled':False})
         if data.get('dry_run') is True:return web.json_response({'handled':True,'operation':operation,'executed':False})
         turn=int(data.get('turn') or 0)
-        queue=await ma_request(request.app,'player_queues/get',{'queue_id':SETTINGS.snapshot()['ma_queue_id']})
-        count=int(queue.get('items') or 0);index=int(queue.get('current_index') or 0)
-        if operation in {'resume','first'} and not count:return web.json_response({'handled':False})
-        if operation=='next' and index+1>=count:return web.json_response({'handled':True,'accepted':False,'message':'队列里没有下一首，请先点一首歌。'})
+        if request.app['music_stopping']:
+            return web.json_response({'handled':True,'accepted':False,'message':'音乐通道正在关闭，请稍后再试。'})
+        generation=request.app['music_generation']
+        if operation not in {'pause','stop','random'}:
+            queue=await ma_request(request.app,'player_queues/get',{'queue_id':SETTINGS.snapshot()['ma_queue_id']})
+            if generation!=request.app['music_generation']:
+                return web.json_response({'handled':True,'accepted':False,'message':'音乐指令已被新的暂停或停止请求取消。'})
+            count=int(queue.get('items') or 0);index=int(queue.get('current_index') or 0)
+            if operation in {'resume','first'} and not count:return web.json_response({'handled':False})
+            if operation=='next' and index+1>=count:return web.json_response({'handled':True,'accepted':False,'message':'队列里没有下一首，请先点一首歌。'})
         jobs=request.app['music_jobs']
         if operation in {'pause','stop'}:
-            # A pause/stop discards controls not yet started, so an old queued play cannot follow it.
+            request.app['music_generation']+=1
+            generation=request.app['music_generation']
             while not jobs.empty():
                 jobs.get_nowait();jobs.task_done()
+            for task in tuple(request.app['music_tasks']):task.cancel()
+            request.app['music_interrupt'].set()
         if jobs.full():return web.json_response({'handled':True,'accepted':False,'message':'音乐指令较多，请稍等片刻。'})
-        jobs.put_nowait((operation,turn))
-        messages={'pause':'正在暂停。','stop':'正在停止。','resume':'正在继续播放。','first':'正在播放第一首。','next':'正在切换下一首。','previous':'正在切换上一首。'}
+        jobs.put_nowait((operation,turn,generation))
+        messages={'pause':'正在暂停。','stop':'正在停止。','resume':'正在继续播放。','random':'正在随机播放音乐。','first':'正在播放第一首。','next':'正在切换下一首。','previous':'正在切换上一首。'}
         return web.json_response({'handled':True,'accepted':True,'message':messages[operation],'operation':operation})
     except (aiohttp.ClientError,asyncio.TimeoutError,RuntimeError,ValueError,TypeError) as error:
         LOG.warning('MUSIC_DIRECT failed=%s',type(error).__name__)

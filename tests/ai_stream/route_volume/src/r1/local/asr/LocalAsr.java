@@ -1,0 +1,1 @@
+package r1.local.asr;public class LocalAsr {public static int stream=2;public static int speechStream(){return stream;}}

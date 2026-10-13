@@ -1,0 +1,116 @@
+{
+  "scope": "2026-10-13 actual installed environment, no acoustic first-song timestamp",
+  "voice_client_sha256": "105942ceb9d625bd25a9b458fff13cd4e387bd9008e47e4d50de08d410017541",
+  "voice_client_android_art": "passed; installed APK SHA256 rechecked",
+  "asr": {
+    "primary": "FunAudioLLM/SenseVoiceSmall",
+    "primary_timeout_s": 4,
+    "fallback": "TeleAI/TeleSpeechASR",
+    "fallback_timeout_s": 4,
+    "local_first": false,
+    "real_song_request_route": "HA_DIRECT",
+    "real_resume_route": "MA_DIRECT",
+    "resume_dispatch_ms": 124,
+    "real_pause_after_update": "pending",
+    "latest_live_pause": {
+      "transcription": "暂停",
+      "started_to_finish_ms": 5198,
+      "dispatch_to_direct_route_ms": 90,
+      "measurement": "includes waiting/speaking/endpoint; not speech-end latency"
+    },
+    "latest_live_random_music": {
+      "transcription": "随机播放点音乐",
+      "started_to_finish_ms": 3983,
+      "route_before_fix": "HA_DIRECT",
+      "result_before_fix": "no_intent_match",
+      "fix_status": "deployed; exact live dry-run maps random; listening test pending"
+    },
+    "live_cloud_only_config_verified": true,
+    "stereo_diagnostic": {
+      "duration_seconds": 3.46,
+      "channel0_rms": 299.94,
+      "channel1_rms": 300.63,
+      "channel0_peak": 5053,
+      "channel1_peak": 5053,
+      "correlation_zero_lag": 0.068663,
+      "local_asr_channel0": "宝凤儿",
+      "local_asr_channel1": "我放",
+      "conclusion": "Neither local result was correct; does not justify changing input channel. Audio kept private."
+    },
+    "retry_once": {
+      "enabled": true,
+      "lifecycle_tests": 12,
+      "normalization_tests": 16,
+      "browser_toggle_save_refresh": "passed",
+      "live_automatic_relisten": "pending",
+      "conditions": "empty/incomplete recognition only; once; real prompt completion; 12s prompt deadline, 15s continuation watchdog"
+    }
+  },
+  "tts": {
+    "two_sentence_completion_count": 2,
+    "first_observed_voice_frames_after_utterance_s": [
+      5.761,
+      5.831
+    ],
+    "timing_scope": "earlier actual device synthetic test, includes polling; not acoustic",
+    "route_volume_real_logs": [
+      {
+        "before": 3,
+        "routed": 8,
+        "corrected": 3
+      },
+      {
+        "before": 0,
+        "routed": 3,
+        "corrected": 0
+      }
+    ],
+    "mid_speech_user_adjustment": "isolated test only"
+  },
+  "music": {
+    "transport": "FLAC",
+    "sample_rate": 44100,
+    "bits": 16,
+    "channels": 2,
+    "server_buffer_ms": 500,
+    "hot_load_s": [
+      0.457,
+      0.472,
+      0.466,
+      0.504
+    ],
+    "cold_load_s": 4.877,
+    "source_vs_acoustic": "load and client events do not establish audible new-song onset",
+    "flow_seek_resume": "146 start, 155 resume, actual source -ss checked",
+    "natural_repeat_runs": 2,
+    "stop_ffmpeg_processes": 0,
+    "flow_isolated_tests": 22,
+    "artwork_defer_actual_trigger": true,
+    "random_and_preemption": {
+      "gateway_tests": 16,
+      "preemption_tests": 12,
+      "core_commands": 1538,
+      "expanded_variants_verified": 93168,
+      "live_dry_run": "passed without playback",
+      "ha_config_check": 0,
+      "ha_reloads": "3 HTTP 200",
+      "limitation": "Cannot retract a playback request already submitted to MA."
+    }
+  },
+  "receiver": {
+    "steady_connection_test_s": 605.812,
+    "steady_connection_samples": 111,
+    "interpretation": "connection and system audio counters; later listening exposed native hard resync",
+    "native_no_chunks_30s": 0,
+    "hard_resync_baseline_30s": 61,
+    "burst_frames_before": 192,
+    "burst_frames_after": 1024,
+    "hard_resync_burst_fixed_30s": 5,
+    "remaining_approach": "frozen at oboe with hardware burst 1024; standalone opensl initialization failed and was rolled back",
+    "acoustic_listening": "user confirmed normal playback with no clicks after burst fix",
+    "snap_client_sha256": "11ecf428b5b92201aa9b7e044723c8d5e1d8921446dd7cbcfdbc5287a198f83d",
+    "hard_resync_final_30s": 2,
+    "partial_chunk_shortage_final_30s": 1
+  },
+  "github": "publication explicitly deferred by user; no remote upload"
+}

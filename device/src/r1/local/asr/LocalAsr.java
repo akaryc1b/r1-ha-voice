@@ -35,6 +35,8 @@ public final class LocalAsr {
             .connectTimeout(2, TimeUnit.SECONDS).readTimeout(0, TimeUnit.SECONDS).build();
     private static volatile IAudioSource source;
     private static volatile Session active;
+    private static final AsrRetryOnce RETRY = new AsrRetryOnce();
+    private static volatile NativeANTEngine retryOwner;
     private static NativeANTEngine engine;
     private static Context deviceContext;
     private static boolean initialized;
@@ -42,6 +44,7 @@ public final class LocalAsr {
     public static synchronized void initialize(NativeANTEngine value, Context context) {
         engine = value;
         deviceContext = context;
+        SpeechRouteVolume.initialize(context);
         if (initialized) return;
         if (context == null) { Log.e(TAG, "INITIALIZATION_CONTEXT_UNAVAILABLE"); return; }
         initialized = true;
@@ -82,7 +85,7 @@ public final class LocalAsr {
         if (deviceContext == null) throw new IOException("Audio context unavailable");
         int stream;
         if ("music".equals(target)) stream = 3;
-        else if ("speech".equals(target)) stream = 9;
+        else if ("speech".equals(target)) stream = speechStream();
         else throw new IllegalArgumentException("Invalid volume target");
         AudioManager audio = (AudioManager)deviceContext.getSystemService(Context.AUDIO_SERVICE);
         int maximum = audio.getStreamMaxVolume(stream);
@@ -102,9 +105,10 @@ public final class LocalAsr {
         } else if (!"get".equals(operation)) throw new IllegalArgumentException("Invalid volume operation");
         level = Math.max(0,Math.min(maximum,level));
         if (!"get".equals(operation)) {
-            audio.setStreamVolume(stream,level,0);
+            if (stream == 3) SpeechRouteVolume.setMusicVolume(audio,level);
+            else audio.setStreamVolume(stream,level,0);
             if (stream == 3) com.unisound.vui.util.UserPerferenceUtil.setCurrentVolume(deviceContext,level);
-            else saved.edit().putInt("speech_level",level).apply();
+            else saved.edit().putInt("speech_level",level).putInt("speech_maximum",maximum).apply();
         }
         JSONObject result = new JSONObject();
         result.put("target",target);result.put("level",audio.getStreamVolume(stream));
@@ -112,16 +116,80 @@ public final class LocalAsr {
         return result;
     }
 
+    public static int speechStream() {
+        try { return CloudVoiceSettings.read().optInt("speech_stream",9) == 2 ? 2 : 9; }
+        catch (Exception ignored) { return 9; }
+    }
+
     public static void restoreSpeechVolume() {
         if (deviceContext == null) return;
         android.content.SharedPreferences saved = deviceContext.getSharedPreferences("r1-cloud-audio",0);
         if (!saved.contains("speech_level")) return;
         AudioManager audio = (AudioManager)deviceContext.getSystemService(Context.AUDIO_SERVICE);
-        int level = Math.max(0,Math.min(audio.getStreamMaxVolume(9),saved.getInt("speech_level",9)));
-        audio.setStreamVolume(9,level,0);
+        int stream=speechStream(); int maximum=audio.getStreamMaxVolume(stream);
+        int oldMaximum=Math.max(1,saved.getInt("speech_maximum",15));
+        int level = Math.max(0,Math.min(maximum,Math.round(saved.getInt("speech_level",9)*maximum/(float)oldMaximum)));
+        audio.setStreamVolume(stream,level,0);
+    }
+
+    public static void voiceTurnChanged(int turn) {
+        RETRY.newTurn(turn);
+        retryOwner = null;
+    }
+
+    public static void wakeupStarted() {
+        VoiceSession.newTurn();
+        Session previous = active;
+        active = null;
+        if (previous != null) {
+            previous.stop = true;
+            previous.opened.countDown(); previous.finished.countDown();
+            if (previous.socket != null) previous.socket.close(1000,"new wakeup");
+        }
+    }
+
+    public static void speechRequested(String text) {
+        RETRY.speechRequested(text,SystemClock.elapsedRealtime());
+    }
+
+    public static void speechError() { RETRY.cancel(); retryOwner = null; }
+
+    private static void retryAfterSpeech(int event) {
+        final long ticket = RETRY.speechEvent(event,VoiceSession.currentTurn(),SystemClock.elapsedRealtime());
+        if (ticket == 0) return;
+        final NativeANTEngine owner = retryOwner;
+        MAIN.post(new Runnable() { @Override public void run() {
+            if (owner == null) return;
+            if (active != null) { RETRY.cancel(ticket); return; }
+            try {
+                if (!CloudVoiceSettings.read().optBoolean("asr_retry_once",true)) { RETRY.cancel(ticket); return; }
+                if (!RETRY.take(ticket,VoiceSession.currentTurn(),SystemClock.elapsedRealtime())) return;
+                retryOwner = null;
+                Log.i(TAG,"RETRY_LISTEN turn=" + VoiceSession.currentTurn());
+                start(owner,"voice",true);
+            } catch (Exception error) { RETRY.cancel(ticket); }
+        }});
+    }
+
+    private static void retryPrompt(final Session session) {
+        long token = RETRY.arm(session.turn,session.retryEnabled && !session.retryContinuation,
+                session.retryable,SystemClock.elapsedRealtime());
+        if (token != 0) {
+            retryOwner = session.owner;
+            final long ticket = token;
+            MAIN.postDelayed(new Runnable() { @Override public void run() {
+                if (RETRY.expire(ticket,SystemClock.elapsedRealtime())) {
+                    retryOwner = null;
+                    Log.i(TAG,"RETRY_PROMPT_EXPIRED");
+                }
+            }},AsrRetryOnce.PROMPT_TIMEOUT_MS);
+            Log.i(TAG,"RETRY_ARMED turn=" + session.turn);
+        }
+        session.owner.pipeline().playTTS(session.failure);
     }
 
     public static void speechEvent(int event) {
+        retryAfterSpeech(event);
         if (event == 2106 || event == 2107) {
             // 自带 TTS 会重设系统音量；等 SDK 回调结束后恢复用户保存的播报音量。
             MAIN.post(new Runnable() { @Override public void run() { restoreSpeechVolume(); }});
@@ -201,11 +269,14 @@ public final class LocalAsr {
         } finally { stream.close(); }
     }
 
-    private static synchronized void start(NativeANTEngine value, String mode) {
+    private static void start(NativeANTEngine value, String mode) { start(value,mode,false); }
+
+    private static synchronized void start(NativeANTEngine value, String mode, boolean continuation) {
         if (active != null) { Log.i(TAG, "ALREADY_LISTENING"); return; }
         try {
             JSONObject settings = config();
-            Session session = new Session(value, source, mode, settings);
+            if (!continuation && ("voice".equals(mode) || "sample".equals(mode))) VoiceSession.newTurn();
+            Session session = new Session(value, source, mode, settings,continuation);
             if (session.captureAudio) {
                 settings.put("capture_next", false);
                 FileOutputStream file = new FileOutputStream(CONFIG);
@@ -217,7 +288,6 @@ public final class LocalAsr {
                 value.doCancelEngine();
                 value.setEngineState(2);
             }
-            if ("voice".equals(mode) || "sample".equals(mode)) VoiceSession.newTurn();
             if ("voice".equals(mode)) value.pipeline().fireASREvent(1101);
             new Thread(session, "r1-local-asr").start();
             Log.i(TAG, "START mode=" + mode);
@@ -253,7 +323,7 @@ public final class LocalAsr {
             return "下一首";
         if (command.matches("(切换|切到|换到|换)?上一[首手守](歌|歌曲)?"))
             return "上一首";
-        if (command.matches("(播放|放)(播放|放)?(点|个|一些)?音乐(吧)?"))
+        if (command.matches("(播放|放)(播放|放)音乐(吧)?"))
             return "播放音乐";
         return text.trim().replaceAll("^[，。！？、,.!?]+|[，。！？、,.!?]+$", "").trim();
     }
@@ -265,6 +335,10 @@ public final class LocalAsr {
         final String url;
         final int channels;
         final boolean captureAudio;
+        final int turn;
+        final boolean retryEnabled;
+        final boolean retryContinuation;
+        volatile boolean retryable;
         final CountDownLatch opened = new CountDownLatch(1);
         final CountDownLatch finished = new CountDownLatch(1);
         final CountDownLatch microphoneHandoff = new CountDownLatch(1);
@@ -283,15 +357,19 @@ public final class LocalAsr {
         long squares;
         long samples;
         int peak;
-        final int watchdogMilliseconds;
+        int watchdogMilliseconds;
 
-        Session(NativeANTEngine owner, IAudioSource audio, String mode, JSONObject settings) throws Exception {
+        Session(NativeANTEngine owner, IAudioSource audio, String mode, JSONObject settings, boolean continuation) throws Exception {
             this.owner = owner; this.audio = audio; this.mode = mode;
+            turn = VoiceSession.currentTurn();
+            retryEnabled = settings.optBoolean("asr_retry_once",true);
+            retryContinuation = continuation;
             url = settings.optString("server", "ws://192.168.1.88:16066");
             channels = settings.optInt("channels", 1) == 2 ? 2 : 1;
             captureAudio = "voice".equals(mode) && settings.optBoolean("capture_next", false);
             CloudVoiceSettings.asrServer(url);
             watchdogMilliseconds = Math.max(20,Math.min(120,settings.optInt("session_timeout_seconds",45)))*1000;
+            if (continuation) watchdogMilliseconds = Math.min(watchdogMilliseconds,15000);
         }
 
         @Override public void run() {
@@ -329,13 +407,14 @@ public final class LocalAsr {
                     @Override public void run() {
                         if (active != Session.this) return;
                         active = null;
+                        if (!VoiceSession.isCurrent(turn)) return;
                         if ("sample".equals(mode) || "verify".equals(mode)) owner.setEngineState(0);
                         owner.pipeline().fireASREvent(1102);
                         if (result.length() > 0 && finalResult && failure.length() == 0 && !"probe".equals(mode) && !"verify".equals(mode)) {
                             Log.i(TAG, "DISPATCH text=" + result);
                             dispatch(owner,result);
                         } else if ("voice".equals(mode) && failure.length() > 0) {
-                            owner.pipeline().playTTS(failure);
+                            retryPrompt(Session.this);
                         }
                         owner.enterWakeup(false);
                     }
@@ -354,7 +433,8 @@ public final class LocalAsr {
                     try {
                         JSONObject reply = new JSONObject(message);
                         if (reply.optString("error", "").length() > 0) {
-                            failure = "没有听清，请再说一遍。";
+                            failure = AsrRetryOnce.PROMPT;
+                            retryable = reply.optBoolean("retryable",false);
                             stop = true;
                             finished.countDown();
                             return;

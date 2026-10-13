@@ -88,6 +88,12 @@ async function cvLoad(){
   document.getElementById('cv-session-timeout').value=d.session_timeout_seconds;
   document.getElementById('cv-music-route').value=d.music_route||'ha';
   document.getElementById('cv-music-ack').checked=!!d.music_ack;
+  document.getElementById('cv-asr-retry-once').checked=d.asr_retry_once!==false;
+  document.getElementById('cv-ai-streaming').checked=d.ai_streaming!==false;
+  document.getElementById('cv-ai-first-content').value=(d.ai_first_content_timeout_ms||4500)/1000;
+  document.getElementById('cv-ai-first-reply').value=(d.ai_first_reply_timeout_ms||8000)/1000;
+  document.getElementById('cv-ai-answer').value=(d.ai_answer_timeout_ms||30000)/1000;
+  document.getElementById('cv-speech-stream').value=d.speech_stream||9;
   cvDeviceReady=true;cvToggleTts();cvToggleAsr();cvMusicPath();
   let warning='';
   try{let gateway=await cvFetch('/voice_gateway_config');cvApplyGateway(gateway);cvGatewayReady=true;}
@@ -99,6 +105,11 @@ async function cvLoad(){
 async function cvSave(b){
  b.disabled=true;cvStatus('正在保存语音设置…');
  try{
+  let ai={ai_first_content_timeout_ms:Number(document.getElementById('cv-ai-first-content').value)*1000,
+   ai_first_reply_timeout_ms:Number(document.getElementById('cv-ai-first-reply').value)*1000,
+   ai_answer_timeout_ms:Number(document.getElementById('cv-ai-answer').value)*1000};
+  for(let id of ['cv-ai-first-content','cv-ai-first-reply','cv-ai-answer'])if(!document.getElementById(id).checkValidity())throw Error('AI 等待时间超出允许范围');
+  if(ai.ai_first_content_timeout_ms>ai.ai_first_reply_timeout_ms||ai.ai_first_reply_timeout_ms>ai.ai_answer_timeout_ms)throw Error('AI 超时需满足正文等待 ≤ 首次回答 ≤ 整答');
   let required=Number(document.getElementById('cv-gw-max_record_seconds').value||18)+3;
   if(document.getElementById('cv-asr').value!=='local'){
    required+=Number(document.getElementById('cv-gw-asr_timeout_seconds').value);
@@ -114,7 +125,10 @@ async function cvSave(b){
   }
   if(cvGatewayReady)await cvSaveGateway(cvVoiceFields);
   await cvPost('/voice_config',{asr:document.getElementById('cv-asr').value,tts:document.getElementById('cv-tts').value,
-   music_ack:document.getElementById('cv-music-ack').checked,...cvConnectionValues()});
+   music_ack:document.getElementById('cv-music-ack').checked,
+   asr_retry_once:document.getElementById('cv-asr-retry-once').checked,
+    ai_streaming:document.getElementById('cv-ai-streaming').checked,
+   speech_stream:Number(document.getElementById('cv-speech-stream').value),...ai,...cvConnectionValues()});
   await cvFetch('/voice_volume?target=speech&operation=set&percent='+document.getElementById('cv-speech-volume').value);
   await cvLoadVolume('speech');cvStatus('已保存，下次识别和播报生效');
  }catch(e){cvStatus(e.message);}finally{cvUpdateReady();}

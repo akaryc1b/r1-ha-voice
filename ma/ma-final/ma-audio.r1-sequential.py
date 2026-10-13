@@ -348,6 +348,26 @@ async def _incoming_overlap_stream(
         yield part
 
 
+class _FlowPlayLogEntry(PlayLogEntry):
+    """Keep the metadata owned by this flow occurrence, including fade corrections."""
+
+    __slots__ = ("streamdetails", "playback_speed", "seek_position")
+
+    def __init__(
+        self, queue_item_id: str, streamdetails: StreamDetails, playback_speed: float
+    ) -> None:
+        super().__init__(queue_item_id)
+        self.streamdetails = streamdetails
+        self.playback_speed = playback_speed
+        self.seek_position = streamdetails.seek_position
+
+    def finish(self) -> None:
+        """Keep final progress without retaining completed source buffers."""
+        if self.streamdetails is not None:
+            self.seek_position = self.streamdetails.seek_position
+            self.streamdetails = None
+
+
 class _IncomingFadePrefetcher:
     """
     Collect the incoming track's fade-in while the outgoing track's tail is held back.
@@ -2400,6 +2420,16 @@ class StreamsAudio:
                         queue.display_name,
                     )
                     continue
+                if queue.queue_id == "upbac50e55":
+                    if _superseded():
+                        return
+                    central_item = self.mass.player_queues.get_item(
+                        queue.queue_id, queue_track.queue_item_id
+                    )
+                    if central_item is not None and central_item is not queue_track:
+                        # The repeat now owns the queue's active buffer. Earlier playlog
+                        # entries retain their own metadata while stop sees this buffer.
+                        central_item.streamdetails = queue_track.streamdetails
                 # re-read the effective crossfade settings so a change applies at the
                 # next track transition instead of the next stream session; a realtime
                 # source still gets its fade decided from what its boundary can
@@ -2558,7 +2588,15 @@ class StreamsAudio:
                     overlay_enabled=overlay_active(queue),
                 )
                 # append to play log so the queue controller can work out which track is playing
-                play_log_entry = PlayLogEntry(queue_track.queue_item_id)
+                play_log_entry = (
+                    _FlowPlayLogEntry(
+                        queue_track.queue_item_id,
+                        queue_track.streamdetails,
+                        float(queue_track.extra_attributes.get("playback_speed") or 1.0),
+                    )
+                    if queue.queue_id == "upbac50e55"
+                    else PlayLogEntry(queue_track.queue_item_id)
+                )
                 flow_log.append(play_log_entry)
 
                 bytes_written = 0
@@ -2820,6 +2858,8 @@ class StreamsAudio:
                     if last_fadeout_part:
                         # crossfade into this item never happened — undo the eager seek_position
                         queue_track.streamdetails.seek_position = raw_seek_position
+                    if isinstance(play_log_entry, _FlowPlayLogEntry):
+                        play_log_entry.finish()
                     continue
 
                 #### HANDLE END OF TRACK
@@ -2834,6 +2874,8 @@ class StreamsAudio:
                     play_log_entry.seconds_streamed = 0
                     if last_fadeout_part:
                         queue_track.streamdetails.seek_position = raw_seek_position
+                    if isinstance(play_log_entry, _FlowPlayLogEntry):
+                        play_log_entry.finish()
                     continue
                 if last_fadeout_part:
                     # edge case: we did not get enough data to make the crossfade
@@ -2877,6 +2919,8 @@ class StreamsAudio:
                 seconds_streamed = bytes_written / pcm_sample_size
                 queue_track.streamdetails.seconds_streamed = seconds_streamed
                 play_log_entry.seconds_streamed = seconds_streamed
+                if isinstance(play_log_entry, _FlowPlayLogEntry):
+                    play_log_entry.finish()
                 # an externally aborted source ends in a clean EOF mid-track, so the
                 # streamed length must not be written back as the item's duration
                 source_buffer = queue_track.streamdetails.buffer

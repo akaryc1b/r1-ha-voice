@@ -19,6 +19,7 @@ public final class CloudSpeech {
     private static Runnable watchdog;
 
     public static boolean play(final c owner, final String text) {
+        if (!Boolean.TRUE.equals(BYPASS.get())) r1.local.asr.LocalAsr.speechRequested(text);
         if (Boolean.TRUE.equals(BYPASS.get()) || text == null || text.trim().length() == 0) return false;
         Log.i("R1SpeechTiming", "REQUEST characters=" + text.length());
         final String url;
@@ -37,7 +38,7 @@ public final class CloudSpeech {
             listener = c.a(owner);
             final d callback = listener;
             try {
-                current.setAudioStreamType(9);
+                current.setAudioStreamType(r1.local.asr.LocalAsr.speechStream());
                 current.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
                     @Override public void onPrepared(MediaPlayer mp) {
                         if (player != mp || token != TOKEN.get()) return;
@@ -45,7 +46,9 @@ public final class CloudSpeech {
                         callback.onEvent(2105);
                         callback.onEvent(2106);
                         r1.local.asr.LocalAsr.restoreSpeechVolume();
+                        r1.local.asr.SpeechRouteVolume.beforePlay(mp);
                         mp.start();
+                        r1.local.asr.SpeechRouteVolume.afterPlay(mp);
                         Log.i("R1CloudTTS", "PLAYING duration_ms=" + mp.getDuration());
                     }
                 });
@@ -93,6 +96,7 @@ public final class CloudSpeech {
         if (previous != null) {
             try { previous.reset(); previous.release(); }
             catch (Exception ignored) {}
+            finally { r1.local.asr.SpeechRouteVolume.afterStop(previous); }
         }
     }
 

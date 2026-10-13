@@ -9,12 +9,12 @@ from urllib.parse import urlsplit
 
 DEFAULTS = {
     "asr_base_url": "https://api.siliconflow.cn/v1",
-    "asr_model": "XingChenAGI/XingChenGSR-V1.0",
+    "asr_model": "FunAudioLLM/SenseVoiceSmall",
     "asr_api_key": "",
-    "asr_timeout_seconds": 6,
-    "asr_fallback_model": "",
+    "asr_timeout_seconds": 4,
+    "asr_fallback_model": "TeleAI/TeleSpeechASR",
     "asr_fallback_timeout_seconds": 4,
-    "local_first": True,
+    "local_first": False,
     "local_max_chars": 12,
     "local_asr_url": "http://127.0.0.1:16066",
     "max_record_seconds": 18,
@@ -49,7 +49,7 @@ NUMBERS = {
 }
 INTEGERS = {"local_max_chars", "max_record_seconds", "bind_port"}
 URL_FIELDS = {"asr_base_url", "tts_base_url", "local_asr_url", "ma_url", "r1_control_url"}
-ASR_PRESETS = ["XingChenAGI/XingChenGSR-V1.0", "FunAudioLLM/SenseVoiceSmall", "TeleAI/TeleSpeechASR"]
+ASR_PRESETS = ["TeleAI/TeleSpeechASR", "FunAudioLLM/SenseVoiceSmall", "XingChenAGI/XingChenGSR-V1.0"]
 
 
 def model_id(value, optional=False):

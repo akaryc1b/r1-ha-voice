@@ -20,7 +20,7 @@
       "before_file": "ma-queue-loader.before-trace.py",
       "after_file": "ma-queue-loader.trace.py",
       "before_sha256": "ead02948ca4450d3651d0c90683df16a16e8b6e23a040bf16b3eb877756e7a0e",
-      "after_sha256": "a90302e1b5cf03b6fe0a3fdb1bd1bd0ca77c83dc4bbd837cb362a0a985296751"
+      "after_sha256": "f302a47e1d220b5b54d01b7c1da7574cf2993787916925f38265567d138389ca"
     },
     {
       "path": "controllers/streams/controller.py",
@@ -34,19 +34,29 @@
       "before_file": "ma-audio.before-r1-sequential.py",
       "after_file": "ma-audio.r1-sequential.py",
       "before_sha256": "8760c06cef4966917138983a5ea049a4de692ad18421b1043a8d6e15f4d1ccfd",
-      "after_sha256": "8a5774dd03b739887b003c0c5874d20533db7ae27b450e029606c74d6deb53d3"
+      "after_sha256": "947401f58daf8b2cf37195e334085838bef5c80bb416405a64983a30f26c956d"
     },
     {
       "path": "controllers/player_queues/controller.py",
       "before_file": "ma-queue-controller.before-r1-debounce.py",
       "after_file": "ma-queue-controller.r1-debounce.py",
       "before_sha256": "3d610ee9b643a5a338104fbf13d67d2b680b7d4570bc7dfe2364e4d9712b4588",
-      "after_sha256": "5630d7658c2475b61948279bb177c9be0812b1c81eb101c04c7cf8b9aa288340"
+      "after_sha256": "65344e5169be3f7d45a7867add5d417035a1154e0a5448a4296609670706040a"
+    },
+    {
+      "path": "controllers/player_queues/playback_tracker.py",
+      "before_file": "ma-playback-tracker.before-flow-offset.py",
+      "after_file": "ma-playback-tracker.flow-offset.py",
+      "before_sha256": "1a1273321b94f3e98dfc00eb7e056ea9fe50bf668c835d2c6d0e3f91148add99",
+      "after_sha256": "e921d33a3f45f9857cef1ce4933d25fa756c2115362a11963bf5c2f57a8d7a63"
     }
   ],
   "dlna_experimental_change_restored": true,
-  "updated_at": "2026-10-13T19:23:35.773553+08:00",
+  "updated_at": "2026-10-13T22:29:41.567038+08:00",
   "r1_sequential_apple_initial_reads": true,
   "r1_button_debounce_seconds": 0.15,
-  "r1_repeat_one_manual_successor_details_prefetch": true
+  "r1_repeat_one_manual_successor_details_prefetch": true,
+  "r1_artwork_deferred_off_playback_path": true,
+  "r1_flow_occurrence_seek_isolated": true,
+  "r1_flow_completed_entries_release_buffer_references": true
 }

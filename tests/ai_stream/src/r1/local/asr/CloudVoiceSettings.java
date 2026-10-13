@@ -1,0 +1,1 @@
+package r1.local.asr; public class CloudVoiceSettings {public static boolean enabled=true; public static int first=4500,reply=8000,answer=30000; public static org.json.JSONObject read(){return new org.json.JSONObject().put("ai_streaming",enabled).put("ai_first_content_timeout_ms",first).put("ai_first_reply_timeout_ms",reply).put("ai_answer_timeout_ms",answer);}}

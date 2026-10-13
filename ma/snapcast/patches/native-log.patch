@@ -1,0 +1,8 @@
+--- a/de/badaix/snapcast/SnapclientService.smali
++++ b/de/badaix/snapcast/SnapclientService.smali
+@@ -1,2 +1,5 @@
+ .method private log(Ljava/lang/String;)V
+     .registers 14
++
++    const-string v0, "SnapNative"
++    invoke-static {v0, p1}, Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I

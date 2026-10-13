@@ -115,6 +115,12 @@ initialize="    iget-object v0, p0, Lcom/unisound/vui/engine/AbstractANTEngine;-
 if initialize not in body:
  body=body.replace("    return-void",initialize+"\n    return-void",1)
  source=source[:start]+body+source[end:];p.write_text(source,encoding="utf-8")
+from apply_ai_stream_hooks import apply as apply_ai_stream_hooks
+from apply_speech_stream import apply as apply_speech_stream
+from apply_asr_retry_hooks import apply as apply_asr_retry_hooks
+apply_ai_stream_hooks(root)
+apply_speech_stream(root)
+apply_asr_retry_hooks(root)
 run([java,"-Xmx1g","-cp",str(root/"tools/*"),"org.jf.smali.Main","assemble","--api","22","-j","4","-o",str(root/"rebuilt.dex"),str(root/"smali")])
 prefix=bytearray((root/"rebuilt.dex").read_bytes());tail=bytearray(original[old_offset:]);delta=len(prefix)-old_offset
 # APK 的 ZIP 条目和 v1 签名保持原样，仅调整容器的绝对偏移。

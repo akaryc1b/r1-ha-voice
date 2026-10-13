@@ -8,12 +8,18 @@ intents:
       slots:
         operation: pause
     - sentences:
-      - '[<music_prefix>](继续|继续播放|继续播放音乐|继续音乐|接着放|接着播放)[<music_suffix>]'
-      - '[<music_prefix>](播放音乐|播放播放音乐|播放歌曲|放音乐|放点音乐|放个音乐|来个音乐|来点音乐|放歌|听歌|听音乐|我想听歌|我要听歌|我想听音乐|我要听音乐|放一首歌|放首歌|来一首歌|来首歌|随机播放|随机播放音乐|随便放首歌|随便放一首歌)[<music_suffix>]'
+      - '[<music_prefix>](播放|继续|继续播放|继续播放音乐|继续音乐|接着放|接着播放)[<music_suffix>]'
+      - '[<music_prefix>](播放音乐|播放播放音乐|播放歌曲|放音乐|放歌|听歌|听音乐|我想听歌|我要听歌|我想听音乐|我要听音乐)[<music_suffix>]'
       - '[<music_prefix>](打开|启动)[卧室]播放器[<music_suffix>]'
-      - '[<music_prefix>](放点歌听|放点歌听听|放点音乐听|来点歌听|给我放点歌听|放点歌|放些歌|放一些音乐|来点歌|来点歌曲|来点儿音乐|随便放点音乐|随便放点歌|随便放一首歌|随便来首歌|随机来首歌|给点音乐)[<music_suffix>]'
       slots:
         operation: resume
+    - sentences:
+      - '[<music_prefix>](随机|随便)(播放|放|来|听)[<music_amount>]<music_kind><music_request_end>'
+      - '[<music_prefix>](播放|放|来|听)<music_amount><music_kind><music_request_end>'
+      - '[<music_prefix>](我想|我要)听<music_amount><music_kind><music_request_end>'
+      - '[<music_prefix>](随机播放|给点音乐)<music_request_end>'
+      slots:
+        operation: random
     - sentences:
       - '[<music_prefix>](停止|停止音乐|停止播放|停止播放音乐|关闭音乐|关掉音乐|别放了|别放|不要放了|停止放歌)[<music_suffix>]'
       - '[<music_prefix>](关闭|关掉)[卧室]播放器[<music_suffix>]'
@@ -43,6 +49,10 @@ intents:
       - '[<music_prefix>](打开|启动)[卧室]播放器并播放{query}'
       - '[<music_prefix>](放点|放些|放一些|来点儿|来些|来一段|放一段){query}'
       - '[<music_prefix>]给我来{query}'
+    - sentences:
+      - '[<music_prefix>](随机|随便)(播放|放|来|听){query}'
+      slots:
+        randomize: true
   R1VolumeControl:
     data:
     - sentences:
@@ -89,6 +99,9 @@ intents:
         volume_target: music
 expansion_rules:
   music_prefix: (请|帮我|给我|麻烦|麻烦帮我|请帮我|请给我|帮忙|能不能|能不能帮我|可以帮我)
+  music_amount: (点[儿]|一点[儿]|些|一些|几首|首|一首|个|一个)
+  music_kind: (音乐|歌|歌曲)
+  music_request_end: '[听[听]][吧|好吗|可以吗|行吗]'
   music_suffix: (吧|好吗|可以吗|行吗|听听)
   volume_music: (音乐[音量]|音箱[音量]|音响[音量]|声音|音量)
   volume_speech: (播报[音量]|助手[音量]|回答[声音]|说话[声音]|语音[音量]|你的声音|你说话)

@@ -10,6 +10,7 @@ it is mixed into the controller and reads/mutates the controller's `PlayerQueueD
 
 from __future__ import annotations
 
+import asyncio
 import time
 
 import random
@@ -17,6 +18,8 @@ from contextlib import suppress
 from typing import TYPE_CHECKING, cast
 
 from music_assistant_models.enums import (
+    ContentType,
+    EventType,
     MediaType,
     PlaybackState,
     QueueOption,
@@ -309,6 +312,9 @@ class QueueLoaderMixin(_PlayerQueuesBase):
         """
         queue_id = queue_item.queue_id
         queue = self._queue_data[queue_id].queue
+        deferred_artwork: Track | None = None
+        if is_start and queue_id == "upbac50e55":
+            self.mass.cancel_task(f"r1_artwork_{queue_id}")
         r1_started=time.monotonic()
         r1_abort=0.0
         r1_buffer=0.0
@@ -341,16 +347,20 @@ class QueueLoaderMixin(_PlayerQueuesBase):
             ):
                 # Youtube Music has poor thumbs by default, so we always fetch the full item
                 # this also catches the case where they have an unavailable item in a listing
-                try:
-                    fetched_item = await self.mass.music.get_item_by_uri(queue_item.uri)
-                except (ResourceTemporarilyUnavailable, RetriesExhausted) as err:
-                    self.logger.warning(
-                        "Could not fetch full details of %s, playing it as listed: %s",
-                        queue_item.uri,
-                        err,
-                    )
+                if self._can_defer_r1_artwork(queue_item, is_start):
+                    deferred_artwork = queue_item.media_item
+                    self.logger.info("R1_ARTWORK_DEFER full_lookup=background")
                 else:
-                    queue_item.media_item = cast("Track", fetched_item)
+                    try:
+                        fetched_item = await self.mass.music.get_item_by_uri(queue_item.uri)
+                    except (ResourceTemporarilyUnavailable, RetriesExhausted) as err:
+                        self.logger.warning(
+                            "Could not fetch full details of %s, playing it as listed: %s",
+                            queue_item.uri,
+                            err,
+                        )
+                    else:
+                        queue_item.media_item = cast("Track", fetched_item)
 
             # ensure we got the full (original) album set
             if album and (
@@ -408,10 +418,116 @@ class QueueLoaderMixin(_PlayerQueuesBase):
             # provider did not report is known before playback starts
             self._apply_probed_duration(queue_item)
 
+        if (
+            deferred_artwork is not None
+            and not deferred_artwork.image
+            and queue_item.streamdetails.media_type != MediaType.AUDIO_SOURCE
+            # Repeat-one's existing preload fetches this same item's full metadata.
+            and queue.repeat_mode != RepeatMode.ONE
+        ):
+            self.mass.create_task(
+                self._refresh_r1_artwork,
+                queue_item,
+                deferred_artwork,
+                task_id=f"r1_artwork_{queue_id}",
+                abort_existing=True,
+                eager_start=False,
+            )
+
         if queue_id == "upbac50e55" and is_start:
             self.logger.info("R1_LOAD_TIMING metadata=%.3f abort=%.3f details=%.3f buffer=%.3f total=%.3f",
                 r1_metadata-r1_started,r1_abort-r1_metadata,r1_details-r1_abort,
                 time.monotonic()-r1_details,time.monotonic()-r1_started)
+
+    @staticmethod
+    def _can_defer_r1_artwork(queue_item: QueueItem, is_start: bool) -> bool:
+        """Only a complete single-Apple AAC listing can start without artwork enrichment."""
+        item = queue_item.media_item
+        if (
+            not is_start
+            or queue_item.queue_id != "upbac50e55"
+            or not queue_item.available
+            or not isinstance(item, Track)
+            or not item.item_id
+            or not item.name
+            or not item.duration
+            or item.duration <= 0
+            or len(item.provider_mappings) != 1
+        ):
+            return False
+        mapping = next(iter(item.provider_mappings))
+        audio = mapping.audio_format
+        return (
+            mapping.provider_domain == "apple_music"
+            and bool(mapping.provider_instance)
+            and item.provider in ("apple_music", mapping.provider_instance)
+            and mapping.item_id == item.item_id
+            and mapping.available
+            and audio.content_type == ContentType.AAC
+            and audio.sample_rate == 44100
+            and audio.bit_depth == 16
+            and audio.channels == 2
+        )
+
+    async def _refresh_r1_artwork(self, queue_item: QueueItem, item: Track) -> None:
+        """Bound optional artwork work to the current playing item and queue session."""
+        queue_id = queue_item.queue_id
+        queue_data = self._queue_data.get(queue_id)
+        if queue_data is None or (session_id := queue_data.session_id) is None:
+            return
+        task = asyncio.current_task()
+        assert task is not None
+        ready = asyncio.Event()
+
+        def still_current() -> bool:
+            return (
+                self._queue_data.get(queue_id) is queue_data
+                and queue_data.session_id == session_id
+                and queue_data.queue.repeat_mode != RepeatMode.ONE
+                and queue_data.queue.current_item is queue_item
+                and self.get_item(queue_id, queue_item.queue_item_id) is queue_item
+                and queue_item.media_item is item
+            )
+
+        def queue_changed(_event: object = None) -> None:
+            if not still_current() or (
+                ready.is_set() and queue_data.queue.state == PlaybackState.IDLE
+            ):
+                task.cancel()
+            elif queue_data.queue.state in (PlaybackState.PLAYING, PlaybackState.PAUSED):
+                ready.set()
+
+        unsubscribe = self.mass.subscribe(
+            queue_changed,
+            (EventType.QUEUE_UPDATED, EventType.QUEUE_ITEMS_UPDATED),
+            queue_id,
+        )
+        try:
+            queue_changed()
+            # play_index publishes the new item after _load_item returns; wait for playback.
+            await asyncio.wait_for(ready.wait(), timeout=8)
+            BYPASS_THROTTLER.set(False)
+            fetched = await asyncio.wait_for(
+                self.mass.music.get_item_by_uri(queue_item.uri), timeout=8
+            )
+            if not still_current() or queue_data.queue.state == PlaybackState.IDLE:
+                return
+            if not isinstance(fetched, Track) or not compare_item_ids(item, fetched):
+                return
+            # Preserve playback identity, quality mappings, album and any artwork added meanwhile.
+            images = UniqueList(item.metadata.images or [])
+            if fetched.image:
+                images.append(fetched.image)
+            images.extend(fetched.metadata.images or [])
+            if images and images != item.metadata.images:
+                item.metadata.images = images
+                if queue_item.image is None:
+                    queue_item.image = item.image
+                self.signal_update(queue_id, items_changed=True)
+        except (MusicAssistantError, asyncio.TimeoutError) as err:
+            self.logger.debug("R1 artwork refresh unavailable: %s", type(err).__name__)
+        finally:
+            unsubscribe()
 
     def _plays_as_album_track(self, queue_item: QueueItem) -> bool:
         """

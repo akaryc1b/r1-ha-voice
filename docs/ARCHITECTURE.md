@@ -17,9 +17,11 @@ flowchart TD
     J -->|普通问题| M[AI 配置页的大模型]
     L --> K
     K --> N[MA 获取 Apple Music 音源]
-    N --> O[AirPlay/RAOP]
-    O --> P[R1 MediaCenter 接收与播放]
-    M --> Q[设备文字播报或云 TTS]
+    N --> O[Snapcast FLAC]
+    O --> P[R1 Snapdroid 接收与播放]
+    N -. 手动回退 .-> X[AirPlay/RAOP → MediaCenter]
+    M --> S[SSE 首句队列与等待预算]
+    S --> Q[设备文字播报或云 TTS]
     L --> Q
 ```
 
@@ -31,4 +33,4 @@ HA 用于家居实体与规则；MA 用于音乐库、音源授权、队列和�
 
 原生云知声识别/问答回调已经被关闭；失败时不会回到“还在成长中”等回答。设备自带 TTS 仍可作为文字播报能力使用。
 
-音乐播放和语音播报是两条音频路径。R1 的 AirPlay 接收端在 `com.droidlogic.mediacenter`，语音客户端在 `com.phicomm.speaker.device`。网页中的逻辑播放器名称、MA 状态更新与人耳听见新曲的时间不相同。
+音乐播放和语音播报是两条音频路径。R1 的 Snapcast 接收端在 `de.badaix.snapcast`，AirPlay 回退端在 `com.droidlogic.mediacenter`，语音客户端在 `com.phicomm.speaker.device`。网页中的逻辑播放器名称、MA 状态更新与人耳听见新曲的时间不相同。

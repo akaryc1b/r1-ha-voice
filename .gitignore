@@ -12,6 +12,9 @@
 # 构建及下载缓存
 __pycache__/
 *.pyc
+*.class
+tests/test-result.json
+device/web/voice-settings.html
 *.log
 node_modules/
 browser-deps/
@@ -30,6 +33,11 @@ tools/image/ma-source/
 # 二进制安装素材留在本地
 *.apk
 *.jar
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
 *.tar
 *.tar.gz
 *.tar.bz2

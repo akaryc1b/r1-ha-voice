@@ -1,0 +1,5 @@
+snapcast==2.3.8
+bidict==0.23.1
+websocket-client==1.9.0
+packaging==26.0
+construct==2.8.8

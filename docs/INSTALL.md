@@ -161,3 +161,17 @@ R1 的 /5 继续配置聊天 AI；8080 的“语音识别与播报”配置 ASR/
 - 合成 ASR 测试返回“暂停”且不执行指令。
 - 现场分别测试暂停/恢复、自然点歌、温湿度和普通问答。
 - 听见新歌才算切歌完成，界面切换不等于已经出声。
+
+## Snapcast 替代播放接收端
+
+复用 MA 容器的 snapserver 0.34.0，不增加容器。精简镜像需恢复同版本 Snapcast provider，
+以及 snapcast、bidict、websocket-client、packaging 纯 Python 依赖。
+R1 为 Android 5.1 / API 22 / ARMv7，使用匹配的 Snapdroid 0.29.0.2；
+本次修改仅关闭其强制44.1→48 kHz软件重采样，并提供显式保存服务器的启动参数。
+
+完整下载来源、SHA、参数化部署/回退和许可证见 [ma/snapcast](../ma/snapcast/README.md)。
+服务使用 TCP 1704（音频）、1705（控制），均限定可信局域网。
+MA 需将 Snap 输出挂到原逻辑播放器并设置为首选，保留 HA 与网关现有队列 ID。
+不能靠直接在数据库替换 player_id 迁移。
+传输为 44.1 kHz / 16 bit / stereo FLAC；R1 HAL 仍可能使用48 kHz，
+不宣称整个硬件链路 bit-perfect。暂停/恢复与进度能力见该 provider 说明及实测记录。
