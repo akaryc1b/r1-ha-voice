@@ -1,0 +1,32 @@
+[
+  {
+    "name": "runtime.tar.bz2",
+    "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-aarch64-shared-cpu.tar.bz2",
+    "sha256": "4e3734f82bc1379fd91f219f5869c7e9d03b7a4f7561907d8abca4849c51a789"
+  },
+  {
+    "name": "encoder-epoch-99-avg-1.int8.onnx",
+    "url": "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23/resolve/main/encoder-epoch-99-avg-1.int8.onnx",
+    "sha256": "1c556ea57cec304e55ec4b72e52c1cc098bb01476ed7d90f3de939fe126487b1"
+  },
+  {
+    "name": "decoder-epoch-99-avg-1.int8.onnx",
+    "url": "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23/resolve/main/decoder-epoch-99-avg-1.int8.onnx",
+    "sha256": "22f123bb8cba9b38974b3df18a3f45e7081f4985ebb2e075d9f21f618c468bbf"
+  },
+  {
+    "name": "joiner-epoch-99-avg-1.int8.onnx",
+    "url": "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23/resolve/main/joiner-epoch-99-avg-1.int8.onnx",
+    "sha256": "a7cf9d82757bdcf786059454495a9ca95e4bd7347f72473fc08d794475c36169"
+  },
+  {
+    "name": "tokens.txt",
+    "url": "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23/resolve/main/tokens.txt",
+    "sha256": "8b294db9045d6e5f94647f4c1eec1af4da143a75053c399611444b378ff966ac"
+  },
+  {
+    "name": "test_wavs-0.wav",
+    "url": "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23/resolve/main/test_wavs/0.wav",
+    "sha256": "668bf8df51a10027b84d5d8816a1ce11ae93545538dc05cfe2aa6811d399c250"
+  }
+]

@@ -1,0 +1,52 @@
+{
+  "created_at": "2026-10-13T12:53:27.104160",
+  "files": [
+    {
+      "path": "providers/apple_music/streaming.py",
+      "before_file": "ma-apple-streaming.before-metadata-cache.py",
+      "after_file": "ma-apple-streaming.metadata-cache.py",
+      "before_sha256": "0cab62c0a9b152aa11412f2303c5e843ad89d64660aa83ec61aaad899308cf6f",
+      "after_sha256": "c749509c6e6f6f1cd1f000ee62182c5c983405f753e50a3bf79864b23595293d"
+    },
+    {
+      "path": "controllers/player_queues/stream_feeder.py",
+      "before_file": "ma-stream-feeder.before-prewarm.py",
+      "after_file": "ma-stream-feeder.prewarm.py",
+      "before_sha256": "15f24848a93c1937c99c6b2bca945dd1731c38d3ffd6990f4e15e1b2741b7e88",
+      "after_sha256": "aa6f609d99a67efe4bff06bc49ada446478531360409d084f8c5e9c7922a1f22"
+    },
+    {
+      "path": "controllers/player_queues/queue_loader.py",
+      "before_file": "ma-queue-loader.before-trace.py",
+      "after_file": "ma-queue-loader.trace.py",
+      "before_sha256": "ead02948ca4450d3651d0c90683df16a16e8b6e23a040bf16b3eb877756e7a0e",
+      "after_sha256": "a90302e1b5cf03b6fe0a3fdb1bd1bd0ca77c83dc4bbd837cb362a0a985296751"
+    },
+    {
+      "path": "controllers/streams/controller.py",
+      "before_file": "ma-streams-controller.before-r1-buffer.py",
+      "after_file": "ma-streams-controller.r1-buffer.py",
+      "before_sha256": "382b30be1b3d3aa92f7717e8d72cbd684df6a684d516fee932851e06d46262f9",
+      "after_sha256": "5618ff490df541b64e4397403d0d6c041de9ea620588a3f6792b81c2315271f8"
+    },
+    {
+      "path": "controllers/streams/audio.py",
+      "before_file": "ma-audio.before-r1-sequential.py",
+      "after_file": "ma-audio.r1-sequential.py",
+      "before_sha256": "8760c06cef4966917138983a5ea049a4de692ad18421b1043a8d6e15f4d1ccfd",
+      "after_sha256": "8a5774dd03b739887b003c0c5874d20533db7ae27b450e029606c74d6deb53d3"
+    },
+    {
+      "path": "controllers/player_queues/controller.py",
+      "before_file": "ma-queue-controller.before-r1-debounce.py",
+      "after_file": "ma-queue-controller.r1-debounce.py",
+      "before_sha256": "3d610ee9b643a5a338104fbf13d67d2b680b7d4570bc7dfe2364e4d9712b4588",
+      "after_sha256": "5630d7658c2475b61948279bb177c9be0812b1c81eb101c04c7cf8b9aa288340"
+    }
+  ],
+  "dlna_experimental_change_restored": true,
+  "updated_at": "2026-10-13T19:23:35.773553+08:00",
+  "r1_sequential_apple_initial_reads": true,
+  "r1_button_debounce_seconds": 0.15,
+  "r1_repeat_one_manual_successor_details_prefetch": true
+}

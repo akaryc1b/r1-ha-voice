@@ -1,0 +1,1 @@
+package okhttp3; public abstract class WebSocketListener {public void onOpen(WebSocket socket,Response response){} public void onMessage(WebSocket socket,String text){} public void onFailure(WebSocket socket,Throwable error,Response response){} public void onClosed(WebSocket socket,int code,String reason){}}

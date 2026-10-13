@@ -1,0 +1,35 @@
+# 私密配置与用户授权
+**/*.private*
+**/.backups/
+**/secrets.yaml
+**/r1_music_authorization.yaml
+**/ma-authorization*
+**/provider*.json
+!gateway/gateway.example.json
+!ma/airplay-restoration/pinned-cli.json
+.env
+.env.*
+# 构建及下载缓存
+__pycache__/
+*.pyc
+*.log
+node_modules/
+browser-deps/
+device/classes/
+device/plugin-dex/
+device/smali/
+device/local-asr-classes.jar
+device/rebuilt.dex
+device/base-prefix.dex
+device/src/r1/local/asr/VoiceConfigPage.java
+asr/assets/
+tools/image/ma-image/
+tools/image/ma-slim/
+tools/image/ma-source/
+
+# 二进制安装素材留在本地
+*.apk
+*.jar
+*.tar
+*.tar.gz
+*.tar.bz2

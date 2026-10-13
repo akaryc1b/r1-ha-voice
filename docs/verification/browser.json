@@ -1,0 +1,18 @@
+{
+  "page_errors": [],
+  "asr_tests": [
+    {
+      "model": "FunAudioLLM/SenseVoiceSmall",
+      "result": "ASR 测试：暂停。；耗时 0.152 秒（未执行指令）"
+    },
+    {
+      "model": "XingChenAGI/XingChenGSR-V1.0",
+      "result": "ASR 测试：暂停；耗时 0.743 秒（未执行指令）"
+    }
+  ],
+  "credentials_not_returned_to_inputs": true,
+  "preset_and_arbitrary_model_saved_and_hot_applied": true,
+  "server_model_query_removed": true,
+  "utf8_json_body_supported": true,
+  "desktop_mobile_rendered": true
+}

@@ -1,0 +1,14 @@
+Host r1-windows
+    HostName YOUR_PC_IP
+    Port 12138
+    User YOUR_WINDOWS_USER
+    IdentityFile /config/r1_pc_ed25519
+    UserKnownHostsFile /config/r1_pc_known_hosts
+    StrictHostKeyChecking yes
+    IdentitiesOnly yes
+    BatchMode yes
+    ConnectTimeout 5
+    ConnectionAttempts 1
+    ServerAliveInterval 5
+    ServerAliveCountMax 1
+    RequestTTY no

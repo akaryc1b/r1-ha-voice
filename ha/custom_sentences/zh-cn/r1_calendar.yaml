@@ -1,0 +1,7 @@
+language: zh-cn
+intents:
+  R1WeekdayQuery:
+    data:
+      - sentences:
+          - "[(今天|现在)][是](星期几|周几)"
+          - "今天是周几"

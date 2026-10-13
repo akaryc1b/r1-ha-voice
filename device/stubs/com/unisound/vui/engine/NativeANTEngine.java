@@ -1,0 +1,1 @@
+package com.unisound.vui.engine; public class NativeANTEngine {public android.content.Context androidContext(){return null;} public void doCancelEngine(){} public void doEnterASR(){} public final void setEngineState(int state){} public ANTPipeline pipeline(){return null;} public void enterWakeup(boolean value){}}

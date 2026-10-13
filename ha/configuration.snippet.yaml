@@ -1,0 +1,17 @@
+# 合并到已有 configuration.yaml，不能重复声明 homeassistant/lovelace 顶层键。
+homeassistant:
+  packages:
+    r1_apple_music: !include r1_apple_music.yaml
+    r1_music_player: !include r1_music_player.yaml
+
+lovelace:
+  resources:
+    - url: /local/r1-player-card.js?v=20261013
+      type: module
+  dashboards:
+    r1-music:
+      mode: yaml
+      title: 音乐
+      icon: mdi:music
+      show_in_sidebar: true
+      filename: r1_music_dashboard.yaml

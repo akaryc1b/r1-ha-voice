@@ -1,0 +1,476 @@
+package r1.local.asr;
+
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.media.AudioRecord;
+import android.media.AudioFormat;
+import android.media.MediaRecorder;
+import android.media.AudioManager;
+import android.util.Log;
+import com.unisound.client.IAudioSource;
+import com.unisound.vui.engine.NativeANTEngine;
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.Arrays;
+import okhttp3.*;
+import okio.ByteString;
+import org.json.JSONObject;
+import nluparser.scheme.NLU;
+
+/** 保留原生唤醒，只将唤醒后的音频交给局域网识别服务。 */
+public final class LocalAsr {
+    private static final String TAG = "R1LocalASR";
+    private static final File CONFIG = new File("/sdcard/r1-local-asr.json");
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    private static final OkHttpClient HTTP = new OkHttpClient.Builder()
+            .connectTimeout(2, TimeUnit.SECONDS).readTimeout(0, TimeUnit.SECONDS).build();
+    private static volatile IAudioSource source;
+    private static volatile Session active;
+    private static NativeANTEngine engine;
+    private static Context deviceContext;
+    private static boolean initialized;
+
+    public static synchronized void initialize(NativeANTEngine value, Context context) {
+        engine = value;
+        deviceContext = context;
+        if (initialized) return;
+        if (context == null) { Log.e(TAG, "INITIALIZATION_CONTEXT_UNAVAILABLE"); return; }
+        initialized = true;
+        // DUMP 是发送者权限：仅系统或 ADB shell 可以触发诊断。
+        context.registerReceiver(new BroadcastReceiver() {
+            @Override public void onReceive(Context context, Intent intent) {
+                String mode = intent.getStringExtra("mode");
+                if ("state".equals(mode)) {
+                    Log.i(TAG, "STATE enabled=" + enabled() + " source=" +
+                            (source == null ? "none" : source.getClass().getName()) +
+                            " active=" + (active != null));
+                    AudioManager audio = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+                    Log.i(TAG, "AUDIO music=" + audio.getStreamVolume(3) + " tts=" + audio.getStreamVolume(9));
+                    Log.i(TAG, "WAKEUP saved=" + VoiceSession.getWakeupWords(context));
+                } else if ("volume".equals(mode)) {
+                    AudioManager audio = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+                    int stream = intent.getIntExtra("stream", 9);
+                    if (stream != 3 && stream != 9) return;
+                    int level = Math.max(0, Math.min(audio.getStreamMaxVolume(stream), intent.getIntExtra("level", 9)));
+                    audio.setStreamVolume(stream, level, 0);
+                    Log.i(TAG, "VOLUME stream=" + stream + " level=" + audio.getStreamVolume(stream));
+                } else if ("say".equals(mode)) {
+                    testSpeech();
+                } else if ("entry".equals(mode)) {
+                    engine.doEnterASR();
+                } else if ("legacy-check".equals(mode)) {
+                    verifyLegacyGate();
+                } else if ("probe".equals(mode) || "sample".equals(mode) || "voice".equals(mode) || "verify".equals(mode)) {
+                    start(engine, mode);
+                }
+            }
+        }, new IntentFilter("com.phicomm.speaker.device.LOCAL_ASR_TEST"),
+                "android.permission.DUMP", MAIN);
+        Log.i(TAG, "INITIALIZED version=1 enabled=" + enabled());
+    }
+
+    public static synchronized JSONObject adjustVolume(String target, String operation, int percent) throws Exception {
+        if (deviceContext == null) throw new IOException("Audio context unavailable");
+        int stream;
+        if ("music".equals(target)) stream = 3;
+        else if ("speech".equals(target)) stream = 9;
+        else throw new IllegalArgumentException("Invalid volume target");
+        AudioManager audio = (AudioManager)deviceContext.getSystemService(Context.AUDIO_SERVICE);
+        int maximum = audio.getStreamMaxVolume(stream);
+        int before = audio.getStreamVolume(stream);
+        int level = before;
+        android.content.SharedPreferences saved = deviceContext.getSharedPreferences("r1-cloud-audio",0);
+        if ("up".equals(operation)) level++;
+        else if ("down".equals(operation)) level--;
+        else if ("set".equals(operation)) {
+            if (percent < 0 || percent > 100) throw new IllegalArgumentException("Volume percent out of range");
+            level = Math.round(percent * maximum / 100.0f);
+        } else if ("mute".equals(operation)) {
+            if (before > 0) saved.edit().putInt("before_mute_" + stream,before).apply();
+            level = 0;
+        } else if ("unmute".equals(operation)) {
+            if (before == 0) level = saved.getInt("before_mute_" + stream,stream == 9 ? 9 : 4);
+        } else if (!"get".equals(operation)) throw new IllegalArgumentException("Invalid volume operation");
+        level = Math.max(0,Math.min(maximum,level));
+        if (!"get".equals(operation)) {
+            audio.setStreamVolume(stream,level,0);
+            if (stream == 3) com.unisound.vui.util.UserPerferenceUtil.setCurrentVolume(deviceContext,level);
+            else saved.edit().putInt("speech_level",level).apply();
+        }
+        JSONObject result = new JSONObject();
+        result.put("target",target);result.put("level",audio.getStreamVolume(stream));
+        result.put("maximum",maximum);result.put("percent",Math.round(audio.getStreamVolume(stream)*100.0f/maximum));
+        return result;
+    }
+
+    public static void restoreSpeechVolume() {
+        if (deviceContext == null) return;
+        android.content.SharedPreferences saved = deviceContext.getSharedPreferences("r1-cloud-audio",0);
+        if (!saved.contains("speech_level")) return;
+        AudioManager audio = (AudioManager)deviceContext.getSystemService(Context.AUDIO_SERVICE);
+        int level = Math.max(0,Math.min(audio.getStreamMaxVolume(9),saved.getInt("speech_level",9)));
+        audio.setStreamVolume(9,level,0);
+    }
+
+    public static void speechEvent(int event) {
+        if (event == 2106 || event == 2107) {
+            // 自带 TTS 会重设系统音量；等 SDK 回调结束后恢复用户保存的播报音量。
+            MAIN.post(new Runnable() { @Override public void run() { restoreSpeechVolume(); }});
+            Log.i("R1SpeechEvents",event == 2106 ? "PLAYING" : "COMPLETED");
+        }
+    }
+
+    public static void musicErrorSpeech(final int turn) {
+        MAIN.post(new Runnable() { @Override public void run() {
+            if (engine!=null && VoiceSession.isCurrent(turn))
+                engine.pipeline().playTTS("音乐指令未能完成，请稍后再试。");
+        }});
+    }
+
+    public static void testSpeech() {
+        MAIN.post(new Runnable() { @Override public void run() {
+            if (engine != null) engine.pipeline().playTTS("硅基流动语音通道测试成功，现在使用你选择的音色播报。");
+        }});
+    }
+
+    // 这里只向现有 HA/AI 处理器投递文本，不调用旧云知声识别或问答。
+    private static void dispatchAssistant(NativeANTEngine owner, String text) {
+        NLU nlu = new NLU();
+        nlu.setService("cn.yunzhisheng.chat");nlu.setText(text);
+        owner.pipeline().fireUserEventTriggered(nlu);
+    }
+
+    private static void dispatch(final NativeANTEngine owner, final String text) {
+        if (!MusicRoute.isDirectMusic(text)) { dispatchAssistant(owner,text);return; }
+        final int turn=VoiceSession.currentTurn();
+        new Thread(new Runnable() { @Override public void run() {
+            final String reply=MusicRoute.route(text);
+            MAIN.post(new Runnable() { @Override public void run() {
+                if (!VoiceSession.isCurrent(turn)) return;
+                if (reply==null) dispatchAssistant(owner,text);
+                else if (reply.length()>0) owner.pipeline().playTTS(reply);
+            }});
+        }}, "R1MusicControl").start();
+    }
+
+    public static void remember(IAudioSource value) { source = value; }
+
+    public static void capture(IAudioSource value, byte[] data, int count) {
+        Session session = active;
+        if (session == null || session.stop || "sample".equals(session.mode) || count <= 0) return;
+        byte[] frame = Arrays.copyOf(data, count);
+        if (!session.frames.offer(frame)) {
+            session.frames.poll();
+            session.frames.offer(frame);
+        }
+    }
+
+    public static boolean enabled() {
+        return true;
+    }
+
+    public static boolean begin(NativeANTEngine value) {
+        start(value, "voice");
+        return true;
+    }
+
+    public static boolean deferWakeup() { return active != null; }
+
+    public static boolean keepMicrophoneOpen(IAudioSource value) {
+        return false;
+    }
+
+    private static JSONObject config() throws Exception {
+        if (!CONFIG.isFile() || CONFIG.length() > 4096) return new JSONObject();
+        FileInputStream stream = new FileInputStream(CONFIG);
+        try {
+            ByteArrayOutputStream data = new ByteArrayOutputStream();
+            byte[] buffer = new byte[1024];
+            int n;
+            while ((n = stream.read(buffer)) != -1) data.write(buffer, 0, n);
+            return new JSONObject(new String(data.toByteArray(), "UTF-8"));
+        } finally { stream.close(); }
+    }
+
+    private static synchronized void start(NativeANTEngine value, String mode) {
+        if (active != null) { Log.i(TAG, "ALREADY_LISTENING"); return; }
+        try {
+            JSONObject settings = config();
+            Session session = new Session(value, source, mode, settings);
+            if (session.captureAudio) {
+                settings.put("capture_next", false);
+                FileOutputStream file = new FileOutputStream(CONFIG);
+                try { file.write(settings.toString().getBytes("UTF-8")); }
+                finally { file.close(); }
+            }
+            active = session;
+            if ("sample".equals(mode) || "verify".equals(mode)) {
+                value.doCancelEngine();
+                value.setEngineState(2);
+            }
+            if ("voice".equals(mode) || "sample".equals(mode)) VoiceSession.newTurn();
+            if ("voice".equals(mode)) value.pipeline().fireASREvent(1101);
+            new Thread(session, "r1-local-asr").start();
+            Log.i(TAG, "START mode=" + mode);
+        } catch (Exception error) {
+            active = null;
+            Log.e(TAG, "START_FAILED", error);
+            value.pipeline().fireASREvent(1102);
+            value.pipeline().playTTS("语音通道配置无法读取，请在控制网页重新保存语音设置。");
+            value.enterWakeup(false);
+        }
+    }
+
+    /** 仅由系统/ADB 诊断入口调用，不采集音频，也不执行设备控制。 */
+    private static void verifyLegacyGate() {
+        try {
+            Class<?> type = Class.forName("com.unisound.vui.handler.filter.NLUDispatcher");
+            Class<?> processor = Class.forName("nluparser.MixtureProcessor");
+            Class<?> context = Class.forName("com.unisound.vui.engine.ANTHandlerContext");
+            Object instance = type.getConstructor(processor).newInstance(new Object[]{null});
+            for (String method : new String[]{"onASRResultLocal", "onASRResultNet", "onASRError"}) {
+                Object blocked = type.getMethod(method,context,String.class)
+                        .invoke(instance,new Object[]{null,"synthetic legacy response"});
+                if (!Boolean.TRUE.equals(blocked)) throw new IllegalStateException(method);
+            }
+            Log.i(TAG,"LEGACY_GATE_VERIFIED callbacks_blocked=3");
+        } catch (Exception error) { Log.e(TAG,"LEGACY_GATE_FAILED",error); }
+    }
+
+    /** 只修正完整的音乐控制短句，避免改写歌名或普通聊天。 */
+    public static String normalize(String text) {
+        String command = text.replaceAll("[\\s，。！？、,.!?]", "");
+        if (command.matches("(切换|切到|换到|换)?(一)?下(一)?[首手守](歌|歌曲)?"))
+            return "下一首";
+        if (command.matches("(切换|切到|换到|换)?上一[首手守](歌|歌曲)?"))
+            return "上一首";
+        if (command.matches("(播放|放)(播放|放)?(点|个|一些)?音乐(吧)?"))
+            return "播放音乐";
+        return text.trim().replaceAll("^[，。！？、,.!?]+|[，。！？、,.!?]+$", "").trim();
+    }
+
+    private static final class Session implements Runnable {
+        final NativeANTEngine owner;
+        final IAudioSource audio;
+        final String mode;
+        final String url;
+        final int channels;
+        final boolean captureAudio;
+        final CountDownLatch opened = new CountDownLatch(1);
+        final CountDownLatch finished = new CountDownLatch(1);
+        final CountDownLatch microphoneHandoff = new CountDownLatch(1);
+        final ArrayBlockingQueue<byte[]> frames = new ArrayBlockingQueue<byte[]>(64);
+        volatile WebSocket socket;
+        volatile boolean stop;
+        volatile String recognized = "";
+        volatile String failure = "";
+        volatile boolean finalResult;
+        boolean audioOpen;
+        volatile boolean heldOpen;
+        volatile boolean closing;
+        volatile AudioRecord recorder;
+        long started;
+        long bytes;
+        long squares;
+        long samples;
+        int peak;
+        final int watchdogMilliseconds;
+
+        Session(NativeANTEngine owner, IAudioSource audio, String mode, JSONObject settings) throws Exception {
+            this.owner = owner; this.audio = audio; this.mode = mode;
+            url = settings.optString("server", "ws://192.168.1.88:16066");
+            channels = settings.optInt("channels", 1) == 2 ? 2 : 1;
+            captureAudio = "voice".equals(mode) && settings.optBoolean("capture_next", false);
+            CloudVoiceSettings.asrServer(url);
+            watchdogMilliseconds = Math.max(20,Math.min(120,settings.optInt("session_timeout_seconds",45)))*1000;
+        }
+
+        @Override public void run() {
+            started = SystemClock.elapsedRealtime();
+            final Runnable watchdog = new Runnable() {
+                @Override public void run() {
+                    if (active != Session.this) return;
+                    failure = "本地语音识别超时";
+                    stop = true;
+                    closeAudio();
+                    if (socket != null) socket.close(1000, "timeout");
+                    opened.countDown(); finished.countDown();
+                }
+            };
+            MAIN.postDelayed(watchdog, "probe".equals(mode) ? 10000 : watchdogMilliseconds);
+            try {
+                if (!"probe".equals(mode)) connect();
+                if ("sample".equals(mode) || "verify".equals(mode)) sample();
+                else microphone();
+            } catch (Exception error) {
+                if (failure.length() == 0) failure = "本地语音识别连接失败";
+                Log.e(TAG, "SESSION_FAILED mode=" + mode, error);
+            } finally {
+                stop = true;
+                closeAudio();
+                if (socket != null) socket.close(1000, "complete");
+                MAIN.removeCallbacks(watchdog);
+                final String result = normalize(recognized);
+                Log.i(TAG, "FINISH mode=" + mode + " bytes=" + bytes +
+                        " rms=" + (samples == 0 ? 0 : (int)Math.sqrt((double)squares / samples)) +
+                        " peak=" + peak + " elapsed_ms=" +
+                        (SystemClock.elapsedRealtime() - started) +
+                        " text=" + result + " error=" + failure);
+                MAIN.post(new Runnable() {
+                    @Override public void run() {
+                        if (active != Session.this) return;
+                        active = null;
+                        if ("sample".equals(mode) || "verify".equals(mode)) owner.setEngineState(0);
+                        owner.pipeline().fireASREvent(1102);
+                        if (result.length() > 0 && finalResult && failure.length() == 0 && !"probe".equals(mode) && !"verify".equals(mode)) {
+                            Log.i(TAG, "DISPATCH text=" + result);
+                            dispatch(owner,result);
+                        } else if ("voice".equals(mode) && failure.length() > 0) {
+                            owner.pipeline().playTTS(failure);
+                        }
+                        owner.enterWakeup(false);
+                    }
+                });
+            }
+        }
+
+        private void connect() throws Exception {
+            socket = HTTP.newWebSocket(new Request.Builder().url(url).build(), new WebSocketListener() {
+                @Override public void onOpen(WebSocket ws, Response response) {
+                    Log.i(TAG, "CONNECTED");
+                    opened.countDown();
+                }
+                @Override public void onMessage(WebSocket ws, String message) {
+                    if ("Done!".equals(message)) { finalResult = true; stop = true; finished.countDown(); return; }
+                    try {
+                        JSONObject reply = new JSONObject(message);
+                        if (reply.optString("error", "").length() > 0) {
+                            failure = "没有听清，请再说一遍。";
+                            stop = true;
+                            finished.countDown();
+                            return;
+                        }
+                        String text = reply.optString("text", "").trim();
+                        if (text.length() > 0) recognized = text;
+                        if (reply.optBoolean("is_final", false) && text.length() > 0) {
+                            finalResult = true;
+                            stop = true;
+                            finished.countDown();
+                        }
+                    } catch (Exception error) { Log.w(TAG, "INVALID_REPLY", error); }
+                }
+                @Override public void onFailure(WebSocket ws, Throwable error, Response response) {
+                    if (!stop) failure = "本地语音识别连接失败";
+                    stop = true; opened.countDown(); finished.countDown();
+                    Log.w(TAG, "SOCKET_FAILED " + error.getClass().getSimpleName());
+                }
+                @Override public void onClosed(WebSocket ws, int code, String reason) {
+                    stop = true; opened.countDown(); finished.countDown();
+                }
+            });
+            if (!opened.await(3, TimeUnit.SECONDS) || stop)
+                throw new IOException("ASR connection unavailable");
+        }
+
+        private void microphone() throws Exception {
+            if (stop) return;
+            // 只保留显式开启诊断后的下一句，正常语音不写录音文件。
+            FileOutputStream diagnostic = captureAudio ? new FileOutputStream("/sdcard/r1-asr-diagnostic.pcm") : null;
+            int captured = 0;
+            try {
+            final long micStarted = SystemClock.elapsedRealtime();
+            Log.i(TAG, "MIC_OPEN source=existing-recording-stream channels=" + channels + " setup_ms=" +
+                    (micStarted - started));
+            while (!stop) {
+                byte[] pcm = frames.poll(250, TimeUnit.MILLISECONDS);
+                if (pcm == null) {
+                    if (SystemClock.elapsedRealtime() - micStarted > 5000 && bytes == 0)
+                        throw new IOException("Existing microphone stream unavailable");
+                    continue;
+                }
+                int count = pcm.length;
+                if (diagnostic != null && captured + count <= 1024 * 1024) {
+                    diagnostic.write(pcm);
+                    captured += count;
+                }
+                bytes += count;
+                byte[] converted = floats(pcm, count, channels);
+                if (!"probe".equals(mode)) {
+                    if (!socket.send(new ByteString(converted)))
+                        throw new IOException("ASR sender stalled");
+                }
+                long elapsed = SystemClock.elapsedRealtime() - micStarted;
+                if ("probe".equals(mode) && SystemClock.elapsedRealtime() - micStarted >= 3000) break;
+                if (!"probe".equals(mode) && recognized.length() == 0 && elapsed > 6500) {
+                    stop = true; break;
+                }
+            }
+            if (socket != null && failure.length() == 0) {
+                socket.send("Done");
+                if (!finalResult) finished.await(14, TimeUnit.SECONDS);
+            }
+            } finally {
+                if (diagnostic != null) {
+                    diagnostic.close();
+                    Log.i(TAG, "PCM_CAPTURED bytes=" + captured + " channels=" + channels);
+                }
+            }
+        }
+
+        private void sample() throws Exception {
+            File file = new File("/sdcard/r1-local-asr-test.wav");
+            if (!file.isFile() || file.length() > 1024 * 1024)
+                throw new IOException("Diagnostic sample unavailable");
+            DataInputStream input = new DataInputStream(new FileInputStream(file));
+            try {
+                byte[] header = new byte[44]; input.readFully(header);
+                ByteBuffer wav = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN);
+                if (wav.getInt(0) != 0x46464952 || wav.getInt(8) != 0x45564157 ||
+                        wav.getShort(20) != 1 || wav.getShort(22) != 1 ||
+                        wav.getInt(24) != 16000 || wav.getShort(34) != 16 ||
+                        wav.getInt(36) != 0x61746164)
+                    throw new IOException("Expected PCM mono 16 kHz sample");
+                byte[] pcm = new byte[3200]; int count;
+                while (!stop && (count = input.read(pcm)) > 0) {
+                    bytes += count;
+                    if (!socket.send(new ByteString(floats(pcm, count, 1))))
+                        throw new IOException("Sample send failed");
+                    Thread.sleep(count * 1000L / 32000L);
+                }
+                if (!stop) socket.send("Done");
+                if (!finished.await(14, TimeUnit.SECONDS)) throw new IOException("No final ASR result");
+            } finally { input.close(); }
+        }
+
+        private byte[] floats(byte[] pcm, int count, int channels) {
+            int frames = count / (channels * 2);
+            ByteBuffer result = ByteBuffer.allocate(frames * 4).order(ByteOrder.LITTLE_ENDIAN);
+            for (int i = 0; i < frames; ++i) {
+                int at = i * channels * 2;
+                short sample = (short)((pcm[at] & 255) | (pcm[at + 1] << 8));
+                int magnitude = Math.abs((int)sample);
+                peak = Math.max(peak, magnitude);
+                squares += (long)sample * sample; samples++;
+                result.putFloat(sample / 32768.0f);
+            }
+            return result.array();
+        }
+
+        private synchronized void closeAudio() {
+            if (!audioOpen) return;
+            audioOpen = false;
+            closing = true;
+            try { recorder.stop(); recorder.release(); recorder = null; }
+            catch (Exception error) { Log.w(TAG, "MIC_CLOSE_FAILED", error); }
+        }
+    }
+}

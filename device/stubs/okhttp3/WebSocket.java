@@ -1,0 +1,1 @@
+package okhttp3; public interface WebSocket {boolean send(String value); boolean send(okio.ByteString value); boolean close(int code,String reason);}

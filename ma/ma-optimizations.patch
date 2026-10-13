@@ -1,0 +1,228 @@
+--- a/providers/apple_music/streaming.py
++++ b/providers/apple_music/streaming.py
+@@ -5,6 +5,7 @@
+ import base64
+ import json
+ import os
++import time
+ from typing import TYPE_CHECKING, Any, cast
+ 
+ import aiofiles
+@@ -43,6 +44,7 @@
+         self._decrypt_client_id: bytes | None = None
+         self._decrypt_private_key: bytes | None = None
+         self._session_id: str | None = None
++        self._r1_metadata_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+ 
+     async def initialize(self) -> None:
+         """Load Widevine CDM files and create a session ID."""
+@@ -106,6 +108,11 @@
+ 
+     async def _fetch_song_stream_metadata(self, song_id: str) -> dict[str, Any]:
+         """Get the stream metadata for a song from Apple Music."""
++        # Brief in-memory reuse of the preloaded, authorized playback metadata.
++        cached = self._r1_metadata_cache.get(song_id)
++        if cached and time.monotonic() - cached[0] < 90:
++            self.logger.info("R1_APPLE_METADATA cache=hit")
++            return cached[1]
+         playback_url = "https://play.music.apple.com/WebObjects/MZPlay.woa/wa/webPlayback"
+         data: dict[str, Any] = {}
+         self.logger.debug("_fetch_song_stream_metadata: Check if Library ID: %s", song_id)
+@@ -127,7 +134,12 @@
+                     if content.get("failureType"):
+                         message = content.get("failureMessage")
+                         raise MediaNotFoundError(f"Failed to get song stream metadata: {message}")
+-                    return cast("dict[str, Any]", content["songList"][0])
++                    metadata = cast("dict[str, Any]", content["songList"][0])
++                    self._r1_metadata_cache[song_id] = (time.monotonic(), metadata)
++                    while len(self._r1_metadata_cache) > 8:
++                        self._r1_metadata_cache.pop(next(iter(self._r1_metadata_cache)))
++                    self.logger.info("R1_APPLE_METADATA cache=miss")
++                    return metadata
+             except (MediaNotFoundError, ClientError) as exc:
+                 if retry:
+                     self.logger.warning("Failed to get song stream metadata: %s", exc)
+--- a/controllers/player_queues/stream_feeder.py
++++ b/controllers/player_queues/stream_feeder.py
+@@ -258,6 +258,29 @@
+         task_id = f"enqueue_next_item_{queue_id}"
+         self.mass.call_later(1, _enqueue_next_item_on_player, next_item, task_id=task_id)
+ 
++    async def _preload_r1_manual_successor(self, queue_id: str, current_item_id: str) -> None:
++        """Prepare manual-next details when repeat-one selects the current track."""
++        queue = self._queue_data[queue_id].queue
++        current_item = queue.current_item
++        if current_item is None or current_item.queue_item_id != current_item_id:
++            return
++        current_index = self.index_by_id(queue_id, current_item_id)
++        if current_index is None:
++            return
++        next_index = self._get_next_index(queue_id, current_index, is_skip=True)
++        if next_index is None or next_index == current_index:
++            return
++        next_item = self.get_item(queue_id, next_index)
++        if next_item is None or not next_item.available or next_item.media_type != MediaType.TRACK:
++            return
++        try:
++            # is_start stays false: metadata/expiring stream details only, no PCM/source slot.
++            await asyncio.wait_for(self._load_item(next_item), timeout=8)
++        except (AudioError, MediaNotFoundError, TimeoutError) as err:
++            self.logger.debug("R1 manual-next prefetch unavailable: %s", type(err).__name__)
++            return
++        self.logger.info("R1_MANUAL_NEXT_PREFETCH ready=true")
++
+     def _preload_next_item(self, queue_id: str, item_id_in_buffer: str) -> None:
+         """
+         Preload the streamdetails for the next item in the queue/buffer.
+@@ -293,6 +316,11 @@
+                     )
+                     # enqueue the next item on the player
+                     self._enqueue_next_item(queue_id, next_item)
++                    # Warm only this speaker's immediate successor; retain MA's buffer limits.
++                    if queue_id == "upbac50e55":
++                        self.prepare_next_audio_buffer(queue_id, item_id_in_buffer)
++                        if next_item.queue_item_id == item_id_in_buffer:
++                            await self._preload_r1_manual_successor(queue_id, item_id_in_buffer)
+ 
+             except QueueEmpty:
+                 return
+--- a/controllers/player_queues/queue_loader.py
++++ b/controllers/player_queues/queue_loader.py
+@@ -9,6 +9,8 @@
+ # ruff: noqa: PLR0915
+ 
+ from __future__ import annotations
++
++import time
+ 
+ import random
+ from contextlib import suppress
+@@ -307,6 +309,9 @@
+         """
+         queue_id = queue_item.queue_id
+         queue = self._queue_data[queue_id].queue
++        r1_started=time.monotonic()
++        r1_abort=0.0
++        r1_buffer=0.0
+ 
+         # we use a contextvar to bypass the throttler for this asyncio task/context
+         # this makes sure that playback has priority over other requests that may be
+@@ -371,9 +376,11 @@
+         # decided once the album above is resolved: a queue item can hold a slim mapping of its
+         # album, which carries none of the provider ids the enqueued album is matched on
+         playing_album_tracks = self._plays_as_album_track(queue_item)
++        r1_metadata=time.monotonic()
+         if is_start:
+             # a track skip should hand its source slot to the item the user is starting
+             await self._abort_superseded_source_buffers(queue_item)
++        r1_abort=time.monotonic()
+ 
+         # Fetch streamdetails (reuses existing if buffer is still valid for the seek).
+         queue_item.streamdetails = await self.mass.streams.audio.get_stream_details(
+@@ -382,6 +389,7 @@
+             fade_in=fade_in,
+             prefer_album_loudness=playing_album_tracks,
+         )
++        r1_details=time.monotonic()
+         # update queue_item.duration from streamdetails if we got a better value
+         self._apply_probed_duration(queue_item)
+ 
+@@ -399,6 +407,11 @@
+             # the first chunk is in, so the source has been probed and a duration the
+             # provider did not report is known before playback starts
+             self._apply_probed_duration(queue_item)
++
++        if queue_id == "upbac50e55" and is_start:
++            self.logger.info("R1_LOAD_TIMING metadata=%.3f abort=%.3f details=%.3f buffer=%.3f total=%.3f",
++                r1_metadata-r1_started,r1_abort-r1_metadata,r1_details-r1_abort,
++                time.monotonic()-r1_details,time.monotonic()-r1_started)
+ 
+     def _plays_as_album_track(self, queue_item: QueueItem) -> bool:
+         """
+--- a/controllers/streams/controller.py
++++ b/controllers/streams/controller.py
+@@ -1330,6 +1330,18 @@
+         )
+         if overlay_active(queue):
+             flow_stream = self.audio.get_overlay_mixed_stream(queue, flow_stream, flow_pcm_format)
++        r1_fast_flac = (
++            queue_id == "upbac50e55"
++            and output_format.content_type == ContentType.FLAC
++            and queue.current_item is not None
++            and queue.current_item.streamdetails is not None
++            and not queue.current_item.streamdetails.is_realtime
++        )
++        flow_pacing = output_pacing_args(PacingProfile.NEAR_REALTIME)
++        if r1_fast_flac:
++            # A bounded opening lead fills this older renderer's playback buffer promptly.
++            # Keep normal paced delivery after these eight seconds; audio format is unchanged.
++            flow_pacing[-1] = "8"
+         audio_bytes = get_ffmpeg_stream(
+             audio_input=flow_stream,
+             input_format=flow_pcm_format,
+@@ -1340,8 +1352,8 @@
+             # this is reported to be an issue especially with Chromecast players.
+             # see for example: https://github.com/music-assistant/support/issues/3717
+             # one continuous stream, so the player gains nothing from running far ahead
+-            extra_input_args=output_pacing_args(PacingProfile.NEAR_REALTIME),
+-            chunk_size=icy_meta_interval if enable_icy else calculate_content_length(output_format),
++            extra_input_args=flow_pacing,
++            chunk_size=icy_meta_interval if enable_icy else 16384 if r1_fast_flac else calculate_content_length(output_format),
+         )
+         client_disconnected = False
+         # same registry as the single-item route: a forced-flow player (overlay)
+--- a/controllers/streams/audio.py
++++ b/controllers/streams/audio.py
+@@ -3863,6 +3863,18 @@
+         ):
+             extra_input_args += ["-readrate", "1", "-readrate_initial_burst", "0.5"]
+ 
++        # Apple catalog MP4 is fragmented with its initialization box at the head.
++        # Sequential reads avoid scanning every remote fragment before first PCM.
++        # Real source seeks retain normal HTTP range support.
++        if (
++            streamdetails.queue_id == "upbac50e55"
++            and streamdetails.provider.startswith("apple_music--")
++            and streamdetails.stream_type == StreamType.ENCRYPTED_HTTP
++            and seek_position == 0
++            and "-seekable" not in extra_input_args
++        ):
++            extra_input_args += ["-seekable", "0"]
++
+         # handle seek support
+         if seek_position and streamdetails.duration and streamdetails.allow_seek:
+             extra_input_args += ["-ss", str(int(seek_position))]
+@@ -3940,6 +3952,13 @@
+                         mass.loop.time() - stream_start,
+                         ffmpeg_proc.input_format.codec_type,
+                     )
++                if streamdetails.queue_id == "upbac50e55" and bytes_sent < chunk_size * 2:
++                    logger.info(
++                        "R1_SOURCE_TIMING chunk=%d elapsed=%.3f realtime=%s",
++                        bytes_sent // chunk_size + 1,
++                        mass.loop.time() - stream_start,
++                        streamdetails.is_realtime,
++                    )
+                 yield chunk
+                 bytes_sent += len(chunk)
+ 
+--- a/controllers/player_queues/controller.py
++++ b/controllers/player_queues/controller.py
+@@ -797,7 +797,7 @@
+ 
+         # debounce rapid next button presses using call_later
+         self.mass.call_later(
+-            1,
++            0.15 if queue_id == "upbac50e55" else 1,
+             self.play_index,
+             queue_id,
+             next_index,
+@@ -836,7 +836,7 @@
+ 
+         # debounce rapid previous button presses using call_later
+         self.mass.call_later(
+-            1,
++            0.15 if queue_id == "upbac50e55" else 1,
+             self.play_index,
+             queue_id,
+             prev_index,

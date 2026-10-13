@@ -1,0 +1,1035 @@
+{
+  "before": {
+    "state": "idle",
+    "current_index": 2,
+    "items": 98,
+    "elapsed_time": 3.331749700546265,
+    "repeat_mode": "one",
+    "shuffle_enabled": false
+  },
+  "volume_before": 27,
+  "stability": [
+    {
+      "seconds": 0.078,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 92198
+        }
+      ]
+    },
+    {
+      "seconds": 0.594,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 102784
+        }
+      ]
+    },
+    {
+      "seconds": 1.11,
+      "state": "playing",
+      "index": 3,
+      "tracks": []
+    },
+    {
+      "seconds": 1.75,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 114073
+        }
+      ]
+    },
+    {
+      "seconds": 2.25,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 135712
+        }
+      ]
+    },
+    {
+      "seconds": 2.766,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 158291
+        }
+      ]
+    },
+    {
+      "seconds": 3.266,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 179929
+        }
+      ]
+    },
+    {
+      "seconds": 3.75,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 190561
+        }
+      ]
+    },
+    {
+      "seconds": 4.25,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 212199
+        }
+      ]
+    },
+    {
+      "seconds": 4.735,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 234778
+        }
+      ]
+    },
+    {
+      "seconds": 5.235,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 256417
+        }
+      ]
+    },
+    {
+      "seconds": 5.75,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 278996
+        }
+      ]
+    },
+    {
+      "seconds": 6.25,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 300634
+        }
+      ]
+    },
+    {
+      "seconds": 6.766,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 324154
+        }
+      ]
+    },
+    {
+      "seconds": 7.281,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 345793
+        }
+      ]
+    },
+    {
+      "seconds": 7.781,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 368372
+        }
+      ]
+    },
+    {
+      "seconds": 8.266,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 390010
+        }
+      ]
+    },
+    {
+      "seconds": 8.766,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 411649
+        }
+      ]
+    },
+    {
+      "seconds": 9.266,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 434228
+        }
+      ]
+    },
+    {
+      "seconds": 9.766,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 455866
+        }
+      ]
+    },
+    {
+      "seconds": 10.266,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 478446
+        }
+      ]
+    },
+    {
+      "seconds": 10.766,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 500084
+        }
+      ]
+    },
+    {
+      "seconds": 11.266,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 521722
+        }
+      ]
+    },
+    {
+      "seconds": 11.766,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 544302
+        }
+      ]
+    },
+    {
+      "seconds": 12.266,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 565940
+        }
+      ]
+    },
+    {
+      "seconds": 12.75,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 586638
+        }
+      ]
+    },
+    {
+      "seconds": 13.25,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 610158
+        }
+      ]
+    },
+    {
+      "seconds": 13.75,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 631796
+        }
+      ]
+    },
+    {
+      "seconds": 14.25,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 654375
+        }
+      ]
+    },
+    {
+      "seconds": 14.75,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 676014
+        }
+      ]
+    },
+    {
+      "seconds": 15.25,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 697652
+        }
+      ]
+    },
+    {
+      "seconds": 15.75,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 720231
+        }
+      ]
+    },
+    {
+      "seconds": 16.25,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 741870
+        }
+      ]
+    },
+    {
+      "seconds": 16.75,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 764449
+        }
+      ]
+    },
+    {
+      "seconds": 17.25,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 786087
+        }
+      ]
+    },
+    {
+      "seconds": 17.766,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 808666
+        }
+      ]
+    },
+    {
+      "seconds": 18.25,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 830305
+        }
+      ]
+    },
+    {
+      "seconds": 18.75,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 851943
+        }
+      ]
+    },
+    {
+      "seconds": 19.235,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 874522
+        }
+      ]
+    },
+    {
+      "seconds": 19.735,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 896161
+        }
+      ]
+    },
+    {
+      "seconds": 20.25,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 917799
+        }
+      ]
+    },
+    {
+      "seconds": 20.735,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 939438
+        }
+      ]
+    },
+    {
+      "seconds": 21.235,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 961076
+        }
+      ]
+    },
+    {
+      "seconds": 21.735,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 983655
+        }
+      ]
+    },
+    {
+      "seconds": 22.235,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1006234
+        }
+      ]
+    },
+    {
+      "seconds": 22.735,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1027873
+        }
+      ]
+    },
+    {
+      "seconds": 23.235,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1049511
+        }
+      ]
+    },
+    {
+      "seconds": 23.735,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1072090
+        }
+      ]
+    },
+    {
+      "seconds": 24.235,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1094670
+        }
+      ]
+    },
+    {
+      "seconds": 24.735,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1116308
+        }
+      ]
+    },
+    {
+      "seconds": 25.235,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1137946
+        }
+      ]
+    },
+    {
+      "seconds": 25.735,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1160526
+        }
+      ]
+    },
+    {
+      "seconds": 26.235,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1182164
+        }
+      ]
+    },
+    {
+      "seconds": 26.766,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1205684
+        }
+      ]
+    },
+    {
+      "seconds": 27.266,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1227322
+        }
+      ]
+    },
+    {
+      "seconds": 27.766,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1249902
+        }
+      ]
+    },
+    {
+      "seconds": 28.266,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1271540
+        }
+      ]
+    },
+    {
+      "seconds": 28.75,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1293178
+        }
+      ]
+    },
+    {
+      "seconds": 29.25,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1315758
+        }
+      ]
+    },
+    {
+      "seconds": 29.75,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1337396
+        }
+      ]
+    },
+    {
+      "seconds": 30.266,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1359975
+        }
+      ]
+    },
+    {
+      "seconds": 30.75,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1381614
+        }
+      ]
+    },
+    {
+      "seconds": 31.25,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1403252
+        }
+      ]
+    },
+    {
+      "seconds": 31.75,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1424890
+        }
+      ]
+    },
+    {
+      "seconds": 32.25,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1447470
+        }
+      ]
+    },
+    {
+      "seconds": 32.75,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1470049
+        }
+      ]
+    },
+    {
+      "seconds": 33.25,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1491687
+        }
+      ]
+    },
+    {
+      "seconds": 33.75,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1513326
+        }
+      ]
+    },
+    {
+      "seconds": 34.25,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1534964
+        }
+      ]
+    },
+    {
+      "seconds": 34.75,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1557543
+        }
+      ]
+    },
+    {
+      "seconds": 35.25,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1579182
+        }
+      ]
+    },
+    {
+      "seconds": 35.735,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1601761
+        }
+      ]
+    },
+    {
+      "seconds": 36.25,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1623399
+        }
+      ]
+    },
+    {
+      "seconds": 36.75,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1645978
+        }
+      ]
+    },
+    {
+      "seconds": 37.235,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1667617
+        }
+      ]
+    },
+    {
+      "seconds": 37.735,
+      "state": "playing",
+      "index": 3,
+      "tracks": [
+        {
+          "client": "22819",
+          "type": "3",
+          "sample_rate": 44100,
+          "frames": 1689255
+        }
+      ]
+    }
+  ],
+  "audible_new_song_confirmed": false,
+  "start_api_completion_seconds": 5.5,
+  "prefetch_ready": true,
+  "command_to_ready_observed_seconds": 6.063,
+  "before_next_logs": [
+    "2026-10-13 11:26:33.272 INFO (MainThread) [music_assistant.streams.audio.media_stream] R1_SOURCE_TIMING chunk=1 elapsed=0.331 realtime=False",
+    "2026-10-13 11:26:33.284 INFO (MainThread) [music_assistant.streams.audio.media_stream] R1_SOURCE_TIMING chunk=2 elapsed=0.343 realtime=False",
+    "2026-10-13 11:26:33.356 INFO (MainThread) [music_assistant.player_queues] R1_LOAD_TIMING metadata=0.021 abort=0.000 details=2.527 buffer=0.426 total=2.974",
+    "2026-10-13 11:26:36.238 INFO (MainThread) [music_assistant.player_queues] R1_MANUAL_NEXT_PREFETCH ready=true"
+  ],
+  "before_next_warning_count": 0,
+  "current_load_complete_to_prefetch_ready_seconds": 2.882,
+  "next_api_completion_seconds": 0.031,
+  "next_logs": [
+    "2026-10-13 11:26:36.238 INFO (MainThread) [music_assistant.player_queues] R1_MANUAL_NEXT_PREFETCH ready=true",
+    "2026-10-13 11:26:37.027 INFO (MainThread) [music_assistant.streams.audio.media_stream] R1_SOURCE_TIMING chunk=1 elapsed=0.383 realtime=False",
+    "2026-10-13 11:26:37.039 INFO (MainThread) [music_assistant.streams.audio.media_stream] R1_SOURCE_TIMING chunk=2 elapsed=0.396 realtime=False",
+    "2026-10-13 11:26:37.124 INFO (MainThread) [music_assistant.player_queues] R1_LOAD_TIMING metadata=0.013 abort=0.018 details=0.000 buffer=0.489 total=0.520",
+    "2026-10-13 11:26:43.300 INFO (MainThread) [music_assistant.player_queues] R1_MANUAL_NEXT_PREFETCH ready=true"
+  ],
+  "next_warning_count": 0,
+  "next_load": {
+    "metadata": 0.013,
+    "abort": 0.018,
+    "details": 0.0,
+    "buffer": 0.489,
+    "total": 0.52
+  },
+  "stability_duration_seconds": 32.5,
+  "state_and_audio_tracks_stable": true,
+  "audio_frames_advance": true,
+  "restored": {
+    "state": "idle",
+    "current_index": 2,
+    "items": 98,
+    "elapsed_time": 3.0365374088287354,
+    "repeat_mode": "one",
+    "shuffle_enabled": false,
+    "volume": 27,
+    "queue_item_ids_order_unchanged": true
+  }
+}

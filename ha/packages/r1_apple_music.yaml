@@ -1,0 +1,324 @@
+# 使用 Home Assistant 原生 REST 命令和脚本控制现有 Music Assistant。
+rest_command:
+  r1_volume_api:
+    url: "http://192.168.1.3:8080/voice_volume?target={{ volume_target }}&operation={{ operation }}&percent={{ percent | default(0) | int }}"
+    method: GET
+    timeout: 3
+  r1_music_api:
+    url: http://127.0.0.1:8095/api
+    method: post
+    content_type: application/json
+    timeout: 45
+    headers: &r1_music_headers
+      Authorization: !include r1_music_authorization.yaml
+    payload: &r1_music_payload >-
+      {{ {'command': command, 'args': args | default({})} | to_json }}
+
+  r1_music_search_api:
+    url: http://127.0.0.1:8095/api
+    method: post
+    content_type: application/json
+    timeout: 8
+    headers: *r1_music_headers
+    payload: *r1_music_payload
+
+script:
+  r1_volume_control:
+    alias: R1 音乐与播报音量
+    icon: mdi:volume-high
+    mode: queued
+    max: 10
+    sequence:
+      - action: rest_command.r1_volume_api
+        data:
+          volume_target: "{{ volume_target }}"
+          operation: "{{ operation }}"
+          percent: "{{ percent | default(0) | int }}"
+        response_variable: volume_result
+      - variables:
+          result:
+            message: >-
+              {% if volume_result.status == 200 and volume_result.content.percent is defined %}
+              {{ '助手播报' if volume_target == 'speech' else '音乐' }}音量已调到{{ volume_result.content.percent }}%。
+              {% else %}音量调整失败，未能确认设备状态。{% endif %}
+      - stop: 返回实际音量
+        response_variable: result
+
+  r1_music_delayed_request:
+    alias: R1 音乐异步执行
+    mode: restart
+    sequence:
+      # 取流与简短播报并行，避免每次播放额外等待两秒。
+      - delay:
+          seconds: "{{ delay_seconds | default(0) | float }}"
+      - action: rest_command.r1_music_api
+        data:
+          command: "{{ command }}"
+          args: "{{ args }}"
+        response_variable: playback_result
+      # 首曲先开播，再补同专辑歌曲，避免查专辑拖慢点歌。
+      - if: "{{ command == 'player_queues/play_media' and continuation_album | default('') != '' and playback_result.status == 200 }}"
+        then:
+          - action: rest_command.r1_music_api
+            continue_on_error: true
+            data:
+              command: music/albums/album_tracks
+              args: "{{ {'item_id': continuation_album | string, 'provider_instance_id_or_domain': 'apple_music--tP6RUHDy'} }}"
+            response_variable: album_result
+          - variables:
+              remaining: >-
+                {% set album = album_result.content if album_result is defined and album_result.status == 200 else [] %}
+                {% set uris = album | map(attribute='uri') | list %}
+                {% set current_uri = args.media.uri if args.media is mapping else args.media %}
+                {% set pos = uris.index(current_uri) if current_uri in uris else -1 %}
+                {{ album[pos+1:] + album[:pos] if pos >= 0 else album }}
+          - if: "{{ remaining | length > 0 }}"
+            then:
+              - action: rest_command.r1_music_api
+                data:
+                  command: player_queues/play_media
+                  args:
+                    queue_id: upbac50e55
+                    # 保留播放和封面所需资料，避免重复传送歌手长篇介绍。
+                    media: >-
+                      {% set ns = namespace(tracks=[]) %}
+                      {% for t in remaining %}
+                        {% set artists = namespace(items=[]) %}
+                        {% for artist in t.artists %}
+                          {% set artists.items = artists.items + [dict(item_id=artist.item_id, provider=artist.provider, name=artist.name, media_type='artist')] %}
+                        {% endfor %}
+                        {% set album = dict(item_id=t.album.item_id, provider=t.album.provider, name=t.album.name, media_type='album') if t.album else none %}
+                        {% set ns.tracks = ns.tracks + [dict(media_type='track', item_id=t.item_id, provider=t.provider, name=t.name, uri=t.uri, artists=artists.items, album=album, provider_mappings=t.provider_mappings, duration=t.duration, disc_number=t.disc_number, track_number=t.track_number, metadata=dict(images=t.metadata.images | default([])))] %}
+                      {% endfor %}
+                      {{ ns.tracks }}
+                    option: add
+
+  r1_apple_music_play:
+    alias: R1 Apple Music 点歌
+    icon: mdi:music
+    mode: restart
+    fields:
+      query:
+        name: 歌名或歌手
+        required: true
+        selector:
+          text: null
+    sequence:
+    - action: script.turn_off
+      target:
+        entity_id: script.r1_music_delayed_request
+    - variables:
+        clean_query: '{{ query | trim | regex_replace(''^(点|一些|一首|首|个|一点)(儿)?'', '''') | regex_replace(''(吧|听听)$'',
+          '''') | trim }}'
+        styles:
+          流行音乐: 国语流行
+          流行歌曲: 国语流行
+          流行歌: 国语流行
+          流行: 国语流行
+          国语流行: 国语流行
+          华语流行: 国语流行
+          国语精选: 国语流行
+          国语歌曲: 国语流行
+          华语精选: 国语流行
+          轻音乐: 轻音乐
+          摇滚: 摇滚
+          摇滚音乐: 摇滚
+          古典音乐: 古典
+          爵士音乐: 爵士
+          爵士: 爵士
+          民谣: 民谣
+          民谣音乐: 民谣
+          纯音乐: 纯音乐
+          英文歌: 欧美流行
+          英文歌曲: 欧美流行
+          儿歌: 儿歌
+          睡眠音乐: 睡眠
+          助眠音乐: 睡眠
+          放松音乐: 放松
+          热门歌曲: 国语流行
+          热门音乐: 国语流行
+    - variables:
+        is_style: '{{ clean_query in styles }}'
+        is_artist: '{{ clean_query | regex_match(''.+的(歌|歌曲|音乐)$'') }}'
+        search_query: '{{ styles.get(clean_query, clean_query | regex_replace(''的(歌|歌曲|音乐)$'', '''')) }}'
+    - action: rest_command.r1_music_search_api
+      continue_on_error: true
+      data:
+        command: music/search
+        args:
+          search_query: '{{ search_query }}'
+          media_types: '{{ [''playlist''] if is_style else [''track''] }}'
+          limit: '{{ 20 if is_artist else 1 }}'
+          providers:
+          - apple_music
+      response_variable: search_result
+    - variables:
+        tracks: '{{ (search_result.content.playlists | default([]) if is_style else search_result.content.tracks |
+          default([])) if search_result is defined and search_result.status == 200 else [] }}'
+    - choose:
+      - conditions: '{{ tracks | length > 0 }}'
+        sequence:
+        - action: script.turn_on
+          target:
+            entity_id: script.r1_music_delayed_request
+          data:
+            variables:
+              delay_seconds: 0
+              continuation_album: '{% if not is_style and not is_artist %}{% set urls = tracks[0].provider_mappings
+                | map(attribute=''url'') | select(''string'') | list %} {% set ids = (urls[0] if urls else '''') |
+                regex_findall(''/album/[^/]+/([0-9]+)'') %} {{ ids[0] if ids else '''' }}{% endif %}'
+              command: player_queues/play_media
+              args:
+                queue_id: upbac50e55
+                media: '{{ tracks[0].uri if is_style else tracks if is_artist else tracks[0] }}'
+                option: replace
+        - variables:
+            result:
+              message: 为你播放{{ clean_query if is_artist else tracks[0].name }}。
+        - stop: 找到歌曲，准备播放
+          response_variable: result
+    - variables:
+        result:
+          message: >-
+            {% if search_result is not defined or search_result.status != 200 %}
+            音乐搜索暂时没有响应，请稍后再试。
+            {% else %}暂时没有找到{{ query }}，请试试歌名加歌手。{% endif %}
+    - stop: 没有找到歌曲
+      response_variable: result
+
+  r1_music_control:
+    alias: R1 音乐控制
+    mode: restart
+    fields:
+      operation:
+        name: 操作
+        required: true
+        selector:
+          select:
+            options:
+            - pause
+            - resume
+            - stop
+            - next
+            - previous
+            - first
+    sequence:
+    - condition: template
+      value_template: '{{ operation in [''pause'', ''resume'', ''stop'', ''next'', ''previous'', ''first''] }}'
+    - action: script.turn_off
+      target:
+        entity_id: script.r1_music_delayed_request
+    - action: rest_command.r1_music_api
+      data:
+        command: player_queues/get
+        args:
+          queue_id: upbac50e55
+      response_variable: queue_result
+    - variables:
+        queue: '{{ queue_result.content if queue_result.status == 200 else {} }}'
+    - if: '{{ operation == ''next'' and (queue.get(''current_index'', 0) | int(0)) + 1 >= (queue.get(''items'', 0)
+        | int(0)) }}'
+      then:
+      - variables:
+          result:
+            message: 队列里还没有下一首，请先点一首歌，等后续歌曲加入队列。
+      - stop: 没有下一首
+        response_variable: result
+    - if: '{{ operation in [''resume'', ''first''] and queue.get(''items'', 0) | int(0) == 0 }}'
+      then:
+      - action: script.r1_apple_music_play
+        data:
+          query: 流行音乐
+        response_variable: result
+      - stop: 启动默认流行歌单
+        response_variable: result
+    - choose:
+      - conditions: '{{ operation in [''resume'', ''next'', ''previous'', ''first''] }}'
+        sequence:
+        - action: script.turn_on
+          target:
+            entity_id: script.r1_music_delayed_request
+          data:
+            variables:
+              delay_seconds: '{{ playback_delay | default(0) | float }}'
+              # 已知队列位置直接播放，避免 MA 默认切歌的一秒合并等待和上一首重播当前曲。
+              command: "{{ 'players/cmd/play' if operation == 'resume' else 'player_queues/play_index' }}"
+              args: >-
+                {% set current = queue.get('current_index', 0) | int(0) %}
+                {% set index = current + 1 if operation == 'next' else [current - 1, 0] | max if operation == 'previous' else 0 %}
+                {{ {'player_id': 'upbac50e55'} if operation == 'resume' else {'queue_id': 'upbac50e55', 'index': index} }}
+      default:
+      - action: rest_command.r1_music_api
+        data:
+          command: '{{ ''player_queues/'' ~ operation }}'
+          args:
+            queue_id: upbac50e55
+    - variables:
+        result:
+          message: '{{ {''pause'': ''已暂停。'', ''resume'': ''继续播放。'', ''stop'': ''已停止。'', ''next'': ''下一首。'', ''previous'':
+            ''上一首。'', ''first'': ''播放第一首。''}[operation] }}'
+    - stop: 返回控制结果
+      response_variable: result
+
+intent_script:
+
+  R1RoomClimate:
+    speech:
+      text: >-
+        {% set requested_room = room | default('卧室', true) %}
+        {% set area = area_id(requested_room) %}
+        {% set ns = namespace(parts=[], found=0) %}
+        {% for s in expand(area_entities(area)) if area %}
+          {% set kind = s.attributes.get('device_class', '') %}
+          {% if (metric == 'both' and kind in ['temperature', 'humidity']) or metric == kind %}
+            {% set ns.found = ns.found + 1 %}
+            {% set label = '温度' if kind == 'temperature' else '湿度' %}
+            {% if is_number(s.state) %}
+              {% set unit = '摄氏度' if s.attributes.get('unit_of_measurement') == '°C' else '华氏度' if s.attributes.get('unit_of_measurement') == '°F' else '百分之' if kind == 'humidity' else s.attributes.get('unit_of_measurement', '') %}
+              {% set value = ('百分之' ~ (s.state | float | round(1))) if kind == 'humidity' else ((s.state | float | round(1)) ~ unit) %}
+              {% set ns.parts = ns.parts + [label ~ value] %}
+            {% else %}
+              {% set ns.parts = ns.parts + [label ~ '传感器当前不可用'] %}
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+        {% if ns.found %}{{ requested_room }}{{ ns.parts | join('，') }}。
+        {% else %}还没有找到{{ requested_room }}对应的温湿度传感器，未能读取数值。{% endif %}
+  R1VolumeControl:
+    action:
+      - action: script.r1_volume_control
+        data:
+          volume_target: "{{ volume_target }}"
+          operation: "{{ operation }}"
+          percent: "{{ level | default(0) | int }}"
+        response_variable: result
+      - stop: 返回音量调整结果
+        response_variable: result
+    speech:
+      text: "{{ action_response.message }}"
+  R1AppleMusicPlay:
+    action:
+      - action: script.r1_apple_music_play
+        data:
+          query: "{{ query }}"
+        response_variable: result
+      - stop: 返回点歌结果
+        response_variable: result
+    speech:
+      text: "{{ action_response.message }}"
+  R1MusicControl:
+    action:
+      - action: script.r1_music_control
+        data:
+          operation: "{{ operation }}"
+        response_variable: result
+      - stop: 返回控制结果
+        response_variable: result
+    speech:
+      text: "{{ action_response.message }}"
+
+  R1WeekdayQuery:
+    speech:
+      text: >-
+        今天是{{ ['星期一','星期二','星期三','星期四','星期五','星期六','星期日'][now().weekday()] }}，
+        {{ now().year }}年{{ now().month }}月{{ now().day }}日。

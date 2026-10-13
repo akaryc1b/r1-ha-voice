@@ -1,0 +1,38 @@
+<div class="card" id="cloud-voice-card">
+<h3>语音识别与播报</h3>
+<p class="cv-help">明确短指令优先本地处理，其余交给你配置的 ASR。识别不完整或云端失败时提示重说，不执行猜测结果。普通问题继续使用“AI 设置”中的模型。</p>
+<div class="form-item"><label>语音识别模式</label><select id="cv-asr"><option value="gateway">本地快速控制 + 可配置云端 ASR</option><option value="local">本地离线识别</option></select></div>
+<div id="cv-asr-options">
+<div class="form-item"><label for="cv-gw-asr_model">ASR 模型 ID</label><input id="cv-gw-asr_model" type="text" autocomplete="off" list="cv-asr-models" placeholder="例如 XingChenAGI/XingChenGSR-V1.0"></div>
+<datalist id="cv-asr-models"><option value="XingChenAGI/XingChenGSR-V1.0"></option><option value="FunAudioLLM/SenseVoiceSmall"></option><option value="TeleAI/TeleSpeechASR"></option></datalist>
+<p class="cv-help">可直接填写其他模型，无需修改代码。接口需支持 WAV 文件和 <code>/audio/transcriptions</code>；聊天、图片模型不能直接用于 ASR。</p>
+<div class="form-item"><label for="cv-gw-asr_base_url">ASR API 基础地址</label><input id="cv-gw-asr_base_url" type="url" autocomplete="off" placeholder="https://api.siliconflow.cn/v1"></div><div class="form-item"><label>ASR API 密钥 <span id="cv-asr-key-state"></span></label><input id="cv-gw-asr_api_key" type="password" autocomplete="new-password" placeholder="留空保留已有密钥"><label class="cv-help"><input id="cv-clear-asr_api_key" type="checkbox">清除已保存密钥</label></div>
+<details class="cv-advanced"><summary>识别速度与分流</summary>
+<div class="form-item"><label for="cv-gw-asr_timeout_seconds">云端 ASR 超时（秒）</label><input id="cv-gw-asr_timeout_seconds" type="number" autocomplete="off" min="1" max="30" step="0.5"></div><div class="form-item"><label for="cv-gw-asr_fallback_model">备用 ASR 模型（留空关闭）</label><input id="cv-gw-asr_fallback_model" type="text" autocomplete="off" list="cv-asr-models"></div><div class="form-item"><label for="cv-gw-asr_fallback_timeout_seconds">备用模型超时（秒）</label><input id="cv-gw-asr_fallback_timeout_seconds" type="number" autocomplete="off" min="1" max="20" step="0.5"></div>
+<div class="form-item"><label><input id="cv-gw-local_first" type="checkbox">明确短指令优先本地识别</label></div>
+<div class="form-item"><label for="cv-gw-local_max_chars">本地快捷指令最大字数</label><input id="cv-gw-local_max_chars" type="number" autocomplete="off" min="1" max="32" step="1"></div><div class="form-item"><label for="cv-gw-max_record_seconds">最长收音时长（秒）</label><input id="cv-gw-max_record_seconds" type="number" autocomplete="off" min="3" max="30" step="1"></div>
+<div class="form-item"><label>整轮识别超时（秒）</label><input id="cv-session-timeout" type="number" min="20" max="120" step="1"></div>
+<p class="cv-help">备用模型使用相同 ASR 接口和密钥。备用调用会增加等待；整轮超时应大于收音时长与两次云端超时之和。</p></details>
+<button type="button" onclick="cvModels(this)">读取接口模型列表</button><button id="cv-test-asr" disabled type="button" onclick="cvAsrTest(this)">测试已保存的 ASR</button>
+<p class="cv-help">ASR 测试仅发送安装包中的合成“暂停”录音，不会暂停音乐或执行任何指令。列表由服务商返回，不保证每个模型都支持 ASR。</p>
+</div>
+<div class="form-item"><label>回答播报</label><select id="cv-tts" onchange="cvToggleTts()"><option value="cosy">云端 TTS（可配置兼容接口）</option><option value="original">设备自带音色（仅播报文字）</option></select></div>
+<div id="cv-cloud-options">
+<div class="form-item"><label for="cv-gw-tts_model">TTS 模型 ID</label><input id="cv-gw-tts_model" type="text" autocomplete="off" placeholder="FunAudioLLM/CosyVoice2-0.5B"></div><div class="form-item"><label for="cv-gw-tts_voice">TTS 音色 ID</label><input id="cv-gw-tts_voice" type="text" autocomplete="off" list="cv-tts-voices" placeholder="FunAudioLLM/CosyVoice2-0.5B:anna"></div>
+<datalist id="cv-tts-voices"><option value="FunAudioLLM/CosyVoice2-0.5B:anna"></option><option value="FunAudioLLM/CosyVoice2-0.5B:bella"></option><option value="FunAudioLLM/CosyVoice2-0.5B:alex"></option></datalist>
+<details class="cv-advanced"><summary>TTS 接口与速度</summary>
+<div class="form-item"><label for="cv-gw-tts_base_url">TTS API 基础地址</label><input id="cv-gw-tts_base_url" type="url" autocomplete="off" ></div><div class="form-item"><label>TTS API 密钥 <span id="cv-tts-key-state"></span></label><input id="cv-gw-tts_api_key" type="password" autocomplete="new-password" placeholder="留空保留已有密钥"><label class="cv-help"><input id="cv-clear-tts_api_key" type="checkbox">清除已保存密钥</label></div><div class="form-item"><label for="cv-gw-tts_timeout_seconds">TTS 总超时（秒）</label><input id="cv-gw-tts_timeout_seconds" type="number" autocomplete="off" min="3" max="60" step="1"></div><div class="form-item"><label for="cv-gw-tts_first_chunk_timeout_seconds">TTS 首块等待（秒）</label><input id="cv-gw-tts_first_chunk_timeout_seconds" type="number" autocomplete="off" min="1" max="15" step="0.5"></div><div class="form-item"><label for="cv-gw-tts_speed">云端语速</label><input id="cv-gw-tts_speed" type="number" autocomplete="off" min="0.5" max="2" step="0.1"></div><div class="form-item"><label for="cv-gw-tts_gain">云端合成增益</label><input id="cv-gw-tts_gain" type="number" autocomplete="off" min="-10" max="10" step="0.5"></div>
+<p class="cv-help">TTS 接口需兼容 <code>/audio/speech</code> 并返回 MP3；模型和音色必须由该服务商支持。增益和语速参数支持范围以服务商为准。</p></details></div>
+<div id="cv-original-options" hidden><p class="cv-help">以下选项仅用于读出文字，不会启用旧语音助手。</p></div>
+<div class="form-item"><label>助手播报音量 <span id="cv-speech-value"></span></label><input id="cv-speech-volume" type="range" min="0" max="100" step="1" oninput="cvVolumeLabel('speech')"></div>
+<div class="form-item"><label><input id="cv-music-ack" type="checkbox">MA 播放控制的确认播报</label></div>
+<details class="cv-advanced"><summary>语音网关连接</summary>
+<div class="form-item"><label>音箱访问的网关地址</label><input id="cv-gateway-url" type="url" autocomplete="off" placeholder="http://N1地址:16068"></div>
+<div class="form-item"><label>音箱访问的离线识别地址</label><input id="cv-local-server" autocomplete="off" placeholder="ws://N1地址:16066"></div>
+<div class="form-item"><label for="cv-gw-local_asr_url">网关访问的本地识别地址</label><input id="cv-gw-local_asr_url" type="text" autocomplete="off" placeholder="http://127.0.0.1:16066"></div>
+<button type="button" onclick="cvSaveConnection(this)">保存网关地址并重连</button>
+<p class="cv-help">更换 N1 地址时先保存并重连。此按钮只修改音箱的连接地址；云端密钥仍保存在 N1。</p></details>
+<p id="cv-status" role="status">正在读取语音设置…</p>
+<button id="cv-save-voice" disabled type="button" onclick="cvSave(this)">保存语音设置</button><button type="button" style="background:#36a18b" onclick="cvTest(this)">测试音箱播报</button><button type="button" style="background:#7b8495" onclick="cvHealth()">检查网关连接</button>
+<p class="cv-help">配置保存后在下一轮识别或播报生效，不需要重刷。唤醒词在下方“唤醒与休眠”设置；AI、Home Assistant 的账号与接口仍在各自配置页管理。</p>
+</div>

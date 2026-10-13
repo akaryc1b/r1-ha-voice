@@ -1,0 +1,19 @@
+title: Apple Music
+views:
+  - title: 卧室音乐
+    path: music
+    icon: mdi:speaker
+    type: panel
+    cards:
+      - type: custom:r1-player-card
+        entity: media_player.r1_apple_music
+        temperature: sensor.temperature_humidity_sensor_fa73_temperature
+        humidity: sensor.temperature_humidity_sensor_fa73_humidity
+  - title: 音乐库与队列
+    path: library
+    icon: mdi:music-box-multiple-outline
+    type: panel
+    cards:
+      - type: iframe
+        url: http://192.168.1.88:8095/
+        aspect_ratio: 110%

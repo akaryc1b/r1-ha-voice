@@ -1,0 +1,19 @@
+{
+  "source_sha256": "6cd76aea5b050fafe2e31cde93f533eb9476f8b07d0b5be7d47703af55a982ce",
+  "apk_sha256": "961740b54896c075b2b9ac396d392d3cc97758c1c46e68b17e62f9ed31c57cec",
+  "prefix_bytes": 8257456,
+  "central_offset": 33182751,
+  "apk_bytes": 33193843,
+  "method_ids": 54595,
+  "old_zip_offset": 8128580,
+  "classes_added": [
+    "r1.local.asr.LocalAsr"
+  ],
+  "hooks": [
+    "audio source reference",
+    "ASR entry",
+    "wake deferral",
+    "ASR error filtering",
+    "diagnostic registration"
+  ]
+}

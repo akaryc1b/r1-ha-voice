@@ -1,0 +1,13 @@
+* text=auto eol=lf
+*.py text eol=lf
+*.sh text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.apk binary
+*.jar binary
+*.gz binary
+*.wav binary
+*.patch -whitespace

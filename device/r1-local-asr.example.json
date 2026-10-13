@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "server": "ws://192.168.1.88:16068/asr",
+  "gateway_url": "http://192.168.1.88:16068",
+  "local_server": "ws://192.168.1.88:16066",
+  "session_timeout_seconds": 45,
+  "channels": 1,
+  "cloud_tts": false,
+  "cloud_voice": "anna",
+  "music_route": "direct",
+  "music_ack": true
+}

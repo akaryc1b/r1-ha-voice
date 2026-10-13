@@ -1,0 +1,101 @@
+language: zh-cn
+intents:
+  R1MusicControl:
+    data:
+    - sentences:
+      - '[<music_prefix>](暂停|暂停一下|暂停音乐|暂停播放|暂停播放音乐)[<music_suffix>]'
+      - '[<music_prefix>](先暂停|先停一下|音乐暂停一下|暂停一会|先别放了)[<music_suffix>]'
+      slots:
+        operation: pause
+    - sentences:
+      - '[<music_prefix>](继续|继续播放|继续播放音乐|继续音乐|接着放|接着播放)[<music_suffix>]'
+      - '[<music_prefix>](播放音乐|播放播放音乐|播放歌曲|放音乐|放点音乐|放个音乐|来个音乐|来点音乐|放歌|听歌|听音乐|我想听歌|我要听歌|我想听音乐|我要听音乐|放一首歌|放首歌|来一首歌|来首歌|随机播放|随机播放音乐|随便放首歌|随便放一首歌)[<music_suffix>]'
+      - '[<music_prefix>](打开|启动)[卧室]播放器[<music_suffix>]'
+      - '[<music_prefix>](放点歌听|放点歌听听|放点音乐听|来点歌听|给我放点歌听|放点歌|放些歌|放一些音乐|来点歌|来点歌曲|来点儿音乐|随便放点音乐|随便放点歌|随便放一首歌|随便来首歌|随机来首歌|给点音乐)[<music_suffix>]'
+      slots:
+        operation: resume
+    - sentences:
+      - '[<music_prefix>](停止|停止音乐|停止播放|停止播放音乐|关闭音乐|关掉音乐|别放了|别放|不要放了|停止放歌)[<music_suffix>]'
+      - '[<music_prefix>](关闭|关掉)[卧室]播放器[<music_suffix>]'
+      - '[<music_prefix>](别播放了|不要播放了|先不听了|把音乐关了)[<music_suffix>]'
+      slots:
+        operation: stop
+    - sentences:
+      - '[<music_prefix>](下一首|换一首|换首歌|播放下一首|切换下一首|切换一下首|切换到下一首|换下一首|下一曲)[<music_suffix>]'
+      - '[<music_prefix>](换个歌|换一首歌|再来一首|换下一曲|切歌)[<music_suffix>]'
+      slots:
+        operation: next
+    - sentences:
+      - '[<music_prefix>](上一首|播放上一首|切换上一首)[<music_suffix>]'
+      - '[<music_prefix>](回到上一首|放回上一首|上一曲)[<music_suffix>]'
+      slots:
+        operation: previous
+    - sentences:
+      - '[<music_prefix>](播放第一首|放第一首|播放第一首歌|放第一首歌)[<music_suffix>]'
+      slots:
+        operation: first
+  R1AppleMusicPlay:
+    data:
+    - sentences:
+      - '[<music_prefix>](播放[一首]|放[一首]|放首|来一首|来首|来点|来一些|听点|我想听|我要听|点歌){query}'
+      - '[<music_prefix>]用(苹果音乐|Apple Music)播放{query}'
+      - '[<music_prefix>]在(R1|音箱)上播放{query}'
+      - '[<music_prefix>](打开|启动)[卧室]播放器并播放{query}'
+      - '[<music_prefix>](放点|放些|放一些|来点儿|来些|来一段|放一段){query}'
+      - '[<music_prefix>]给我来{query}'
+  R1VolumeControl:
+    data:
+    - sentences:
+      - '[<music_prefix>][把][<volume_music>](大声[一]点|大[一]点|调大[一]点|调高[一]点|提高[一]点)[吧]'
+      slots:
+        operation: up
+        volume_target: music
+    - sentences:
+      - '[<music_prefix>][把][<volume_music>](小声[一]点|小[一]点|调小[一]点|调低[一]点|降低[一]点)[吧]'
+      slots:
+        operation: down
+        volume_target: music
+    - sentences:
+      - '[<music_prefix>][把]<volume_music>[设置][调整][调][到]百分之{r1_volume_level:level}'
+      - '[<music_prefix>][把]<volume_music>[设置][调整][调][到]{r1_volume_level:level}[百分比|%]'
+      slots:
+        operation: set
+        volume_target: music
+    - sentences:
+      - '[<music_prefix>][把]<volume_speech>(大声[一]点|大[一]点|调大[一]点|调高[一]点|提高[一]点)[吧]'
+      slots:
+        operation: up
+        volume_target: speech
+    - sentences:
+      - '[<music_prefix>][把]<volume_speech>(小声[一]点|小[一]点|调小[一]点|调低[一]点|降低[一]点)[吧]'
+      slots:
+        operation: down
+        volume_target: speech
+    - sentences:
+      - '[<music_prefix>][把]<volume_speech>[设置][调整][调][到]百分之{r1_volume_level:level}'
+      - '[<music_prefix>][把]<volume_speech>[设置][调整][调][到]{r1_volume_level:level}[百分比|%]'
+      slots:
+        operation: set
+        volume_target: speech
+    - sentences:
+      - '[<music_prefix>](静音|音乐静音|音箱静音|音响静音)'
+      slots:
+        operation: mute
+        volume_target: music
+    - sentences:
+      - '[<music_prefix>](取消静音|取消音乐静音|恢复声音|恢复音量)'
+      slots:
+        operation: unmute
+        volume_target: music
+expansion_rules:
+  music_prefix: (请|帮我|给我|麻烦|麻烦帮我|请帮我|请给我|帮忙|能不能|能不能帮我|可以帮我)
+  music_suffix: (吧|好吗|可以吗|行吗|听听)
+  volume_music: (音乐[音量]|音箱[音量]|音响[音量]|声音|音量)
+  volume_speech: (播报[音量]|助手[音量]|回答[声音]|说话[声音]|语音[音量]|你的声音|你说话)
+lists:
+  query:
+    wildcard: true
+  r1_volume_level:
+    range:
+      from: 0
+      to: 100

@@ -1,0 +1,16 @@
+[
+  {
+    "case": "pause",
+    "mode": "verify",
+    "recognized": "暂停",
+    "executed": false,
+    "elapsed_ms": 1941
+  },
+  {
+    "case": "question",
+    "mode": "verify",
+    "recognized": "彩虹是如何形成的",
+    "executed": false,
+    "elapsed_ms": 4312
+  }
+]

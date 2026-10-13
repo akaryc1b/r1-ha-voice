@@ -1,0 +1,36 @@
+language: zh-cn
+intents:
+  R1RoomClimate:
+    data:
+    - sentences:
+      - '[<climate_prefix>][<climate_now>][的]温度[<climate_end>][啊|呀|呢]'
+      - '[<climate_prefix>][<climate_now>][的]{r1_sensor_room:room}[的][<climate_now>]温度[<climate_end>][啊|呀|呢]'
+      - '[<climate_prefix>]{r1_sensor_room:room}[<climate_now>][的]温度[<climate_end>][啊|呀|呢]'
+      - '[<climate_prefix>][<climate_now>](多少度|几度)[啊|呀|呢]'
+      - '[<climate_prefix>][<climate_now>]{r1_sensor_room:room}[现在][有](多少度|几度)[啊|呀|呢]'
+      slots:
+        metric: temperature
+    - sentences:
+      - '[<climate_prefix>][<climate_now>][的]湿度[<climate_end>][啊|呀|呢]'
+      - '[<climate_prefix>][<climate_now>][的]{r1_sensor_room:room}[的][<climate_now>]湿度[<climate_end>][啊|呀|呢]'
+      - '[<climate_prefix>]{r1_sensor_room:room}[<climate_now>][的]湿度[<climate_end>][啊|呀|呢]'
+      slots:
+        metric: humidity
+    - sentences:
+      - '[<climate_prefix>][<climate_now>][的]温湿度[<climate_end>][啊|呀|呢]'
+      - '[<climate_prefix>][<climate_now>][的]{r1_sensor_room:room}[的][<climate_now>]温湿度[<climate_end>][啊|呀|呢]'
+      - '[<climate_prefix>]{r1_sensor_room:room}[<climate_now>][的]温湿度[<climate_end>][啊|呀|呢]'
+      - '[<climate_prefix>][<climate_now>][室内|家里][的]温度和湿度[<climate_end>]'
+      - '[<climate_prefix>]{r1_sensor_room:room}[的]温度和湿度[<climate_end>]'
+      slots:
+        metric: both
+expansion_rules:
+  climate_prefix: (请|帮我|给我|告诉我|查一下|查询一下|看一下|报一下|播报一下|读一下|问一下)
+  climate_now: (现在|当前|今天)
+  climate_end: (是多少|多少|有多少|怎么样|什么情况)
+lists:
+  r1_sensor_room:
+    values:
+    - 卧室
+    - 客厅
+    - 厨房

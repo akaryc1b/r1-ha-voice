@@ -1,0 +1,26 @@
+language: zh-cn
+intents:
+  R1ComputerPower:
+    data:
+    - sentences:
+      - '[<computer_prefix>](打开|开启|启动)(电脑|我的电脑|台式机)'
+      - '[<computer_prefix>](给电脑开机|电脑开机)'
+      - '[<computer_prefix>](打开|开启|启动)[一下](电脑|我的电脑|台式机)[吧]'
+      - '[<computer_prefix>]把(电脑|我的电脑|台式机)(打开|开启|启动)[吧]'
+      - '[<computer_prefix>]给[我的]电脑开[一下]机'
+      - '[<computer_prefix>](开机|电脑开机)[吧]'
+      slots:
+        operation: wake
+    - sentences:
+      - '[<computer_prefix>](关闭|关掉)(电脑|我的电脑|台式机)'
+      - '[<computer_prefix>](给电脑关机|电脑关机)'
+      slots:
+        operation: shutdown
+    - sentences:
+      - '[<computer_prefix>](取消|停止)(电脑|我的电脑|台式机)[的](关机|关机倒计时)'
+      - '[<computer_prefix>]取消关闭(电脑|我的电脑|台式机)'
+      - '[<computer_prefix>]取消关机'
+      slots:
+        operation: cancel
+expansion_rules:
+  computer_prefix: (请|帮我|请帮我|麻烦|麻烦帮我)

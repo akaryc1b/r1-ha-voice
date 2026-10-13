@@ -1,0 +1,101 @@
+# 复用 HA 原生 WOL 按钮和现有 Windows SSH 服务。
+shell_command:
+  r1_pc_status: /usr/bin/ssh -F /config/r1_pc_ssh_config r1-windows r1-ha-status
+  r1_pc_shutdown: /usr/bin/ssh -F /config/r1_pc_ssh_config r1-windows r1-ha-shutdown-60
+  r1_pc_cancel_shutdown: /usr/bin/ssh -F /config/r1_pc_ssh_config r1-windows r1-ha-cancel-shutdown
+
+script:
+  r1_pc_power_control:
+    alias: R1 电脑控制内部脚本
+    mode: queued
+    max: 5
+    fields:
+      operation:
+        required: true
+        selector:
+          select:
+            options: [wake, shutdown, cancel]
+    sequence:
+      - choose:
+          - conditions: "{{ operation == 'wake' }}"
+            sequence:
+              - action: button.press
+                target:
+                  entity_id: button.akary_pc_wake
+              - variables:
+                  result:
+                    ok: true
+                    message: 已发送电脑开机指令。
+              - stop: 返回开机指令结果
+                response_variable: result
+          - conditions: "{{ operation == 'shutdown' }}"
+            sequence:
+              - action: shell_command.r1_pc_shutdown
+                response_variable: ssh_result
+          - conditions: "{{ operation == 'cancel' }}"
+            sequence:
+              - action: shell_command.r1_pc_cancel_shutdown
+                response_variable: ssh_result
+        default:
+          - variables:
+              result:
+                ok: false
+                message: 不支持这个电脑操作。
+          - stop: 操作无效
+            response_variable: result
+      - variables:
+          ssh_status: "{{ ssh_result.stdout | default('') | trim }}"
+          result:
+            ok: "{{ ssh_result.returncode == 0 and ssh_status in ['shutdown_scheduled', 'shutdown_cancelled', 'no_shutdown_pending'] }}"
+            message: >-
+              {% if ssh_result.returncode == 0 and ssh_status == 'shutdown_scheduled' %}
+                电脑将在六十秒后关机，请保存文件。
+              {% elif ssh_result.returncode == 0 and ssh_status == 'shutdown_cancelled' %}
+                已取消电脑关机。
+              {% elif ssh_result.returncode == 0 and ssh_status == 'no_shutdown_pending' %}
+                电脑当前没有待取消的关机倒计时。
+              {% else %}
+                电脑控制连接失败，指令未确认执行。
+              {% endif %}
+      - stop: 返回电脑控制结果
+        response_variable: result
+
+  r1_pc_shutdown:
+    alias: 电脑关机（60秒）
+    icon: mdi:power
+    mode: single
+    sequence:
+      - action: script.r1_pc_power_control
+        data:
+          operation: shutdown
+        response_variable: result
+      - if: "{{ not result.ok }}"
+        then:
+          - stop: "{{ result.message | trim }}"
+            error: true
+
+  r1_pc_cancel_shutdown:
+    alias: 取消电脑关机
+    icon: mdi:close-circle-outline
+    mode: single
+    sequence:
+      - action: script.r1_pc_power_control
+        data:
+          operation: cancel
+        response_variable: result
+      - if: "{{ not result.ok }}"
+        then:
+          - stop: "{{ result.message | trim }}"
+            error: true
+
+intent_script:
+  R1ComputerPower:
+    action:
+      - action: script.r1_pc_power_control
+        data:
+          operation: "{{ operation }}"
+        response_variable: result
+      - stop: 返回电脑操作结果
+        response_variable: result
+    speech:
+      text: "{{ action_response.message | trim }}"
