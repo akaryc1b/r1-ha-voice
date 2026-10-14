@@ -83,7 +83,7 @@ chmod +x /etc/init.d/r1-local-asr
 
 ## 3. 网关文件与服务
 
-将以下四个仓库文件放到 MA 数据目录下的 r1-cloud-voice/：
+将以下五个仓库文件放到 MA 数据目录下的 r1-cloud-voice/：
 
 ~~~text
 gateway/voice_gateway.py
@@ -114,9 +114,17 @@ docker exec r1-apple-music python -u /data/r1-cloud-voice/voice_gateway.py
 
 网关默认 N1 192.168.1.88:16068。更换 IP 时更新 gateway.private.json 的 bind_host、allowed_clients、r1_control_url，并在 R1 8080 更新网关/离线识别地址。改模型无需重启；改监听地址需重启服务。
 
-## 4. AirPlay 和 MA
+## 4. Apple Music 和播放输出
 
-官方 MA 配套依赖完整时，直接在 MA 启用 AirPlay 并发现 R1 的 MediaCenter 接收端。本次接收端原始名称是 Airplay-Player-MediaCenter；它是 R1 的物理协议，不是另一个音箱。
+打开 MA 8095，添加 Apple Music 并完成订阅账号授权，创建 MA 访问令牌。
+
+当前方案使用 Snapcast 作为 R1 的首选输出。先按 [Snapcast 配置](../ma/snapcast/README.md) 准备 N1 服务和 R1 Snapdroid，发现接收端后将其关联到原 R1 逻辑播放器，再在 MA 正常设置页面选为首选协议。保留同一个逻辑队列，避免 HA 与网关仍控制另一个播放器。
+
+在 R1 8080 的“音乐播放与音源”填写 MA 地址、实际队列 ID、MA 令牌。host 网络下网关访问 MA 通常用 http://127.0.0.1:8095。
+
+### 可选：保留 AirPlay 回退
+
+官方 MA 配套依赖完整时，可启用 AirPlay 并发现 R1 的 MediaCenter 接收端。原始名称 Airplay-Player-MediaCenter 是 R1 的另一个播放协议，需要回退时再将其设为首选。
 
 当前精简环境补齐过的依赖清单：
 
@@ -131,10 +139,6 @@ docker exec r1-apple-music python -u /data/r1-cloud-voice/voice_gateway.py
 | cliairplay ARM64 | 0.5.5 |
 
 这些是当前已验证镜像的配套文件，不能据此全局升级 HA 或宿主 Python。缺失时优先使用同版本官方 MA 文件；ARM64 miniaudio 未必有对应 wheel，不要把“pip 一次安装”当成已验证安装方法。
-
-打开 MA 8095，添加 Apple Music 并完成订阅账号授权，创建 MA 访问令牌。把 R1 的 AirPlay 关联到实际逻辑播放器并选为首选协议，停用重复逻辑播放器。
-
-在 R1 8080 的“音乐播放与音源”填写 MA 地址、队列 ID、令牌。host 网络下网关访问 MA 通常用 http://127.0.0.1:8095。
 
 ## 5. R1、HA 与 AI
 
