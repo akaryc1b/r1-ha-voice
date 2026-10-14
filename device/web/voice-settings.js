@@ -8,6 +8,37 @@ const cvMusicFields=['ma_url','ma_queue_id','ma_token'];
 const cvNumbers=new Set(['asr_timeout_seconds','asr_fallback_timeout_seconds','local_max_chars','max_record_seconds',
  'tts_timeout_seconds','tts_first_chunk_timeout_seconds','tts_speed','tts_gain']);
 const cvSecrets={asr_api_key:'asr',tts_api_key:'tts',ma_token:'ma'};
+// 预置 ID 仅用于已知模型，网关仍接收原有 tts_voice 字段。
+const cvTtsVoicePresets={
+ 'FunAudioLLM/CosyVoice2-0.5B':[
+  ['anna','沉稳女声'],['bella','激情女声'],['claire','温柔女声'],['diana','欢快女声'],
+  ['alex','沉稳男声'],['benjamin','低沉男声'],['charles','磁性男声'],['david','欢快男声']]
+};
+function cvSyncTtsVoices(){
+ const model=document.getElementById('cv-gw-tts_model').value.trim();
+ const input=document.getElementById('cv-gw-tts_voice');
+ const choice=document.getElementById('cv-tts-voice-choice');
+ const current=input.value.trim(),presets=cvTtsVoicePresets[model]||[];
+ choice.replaceChildren();
+ for(const [id,label] of presets){
+  const option=document.createElement('option');option.value=model+':'+id;
+  option.textContent=label+'（'+id+'）';choice.appendChild(option);
+ }
+ const custom=document.createElement('option');custom.value='__custom__';
+ custom.textContent='自定义音色 ID';choice.appendChild(custom);
+ choice.value=presets.some(([id])=>model+':'+id===current)?current:'__custom__';
+ document.getElementById('cv-tts-voice-custom').hidden=choice.value!=='__custom__';
+ document.getElementById('cv-tts-voice-help').textContent=presets.length
+  ?'预置音色适用于支持该模型音色的接口；选择后点击“保存语音设置”生效。也可填写服务商的自定义音色 ID。'
+  :'此模型的音色由服务商定义，请填写其提供的音色 ID。已有音色不会因切换模型而被覆盖。';
+}
+function cvTtsVoiceChanged(){
+ const choice=document.getElementById('cv-tts-voice-choice');
+ const custom=choice.value==='__custom__';
+ document.getElementById('cv-tts-voice-custom').hidden=!custom;
+ if(!custom)document.getElementById('cv-gw-tts_voice').value=choice.value;
+ else document.getElementById('cv-gw-tts_voice').focus();
+}
 function cvUpdateReady(){
  let offline=document.getElementById('cv-asr').value==='local'&&document.getElementById('cv-tts').value==='original';
  document.getElementById('cv-save-voice').disabled=!(cvDeviceReady&&cvVolumesReady&&(cvGatewayReady||offline));
@@ -25,6 +56,7 @@ function cvApplyGateway(data,fields=[...cvVoiceFields,...cvMusicFields]){
   }else if(el.type==='checkbox'){el.checked=!!data[key];}
   else{el.value=data[key];}
  }
+ if(fields.includes('tts_model')||fields.includes('tts_voice'))cvSyncTtsVoices();
  if(data.ma_url){
   try{let link=new URL(data.ma_url),gateway=new URL(document.getElementById('cv-gateway-url').value);
    if(['127.0.0.1','localhost'].includes(link.hostname))link.hostname=gateway.hostname;
@@ -139,4 +171,6 @@ function cvMusicPath(){let direct=document.getElementById('cv-music-route').valu
 async function cvSaveMusic(b){b.disabled=true;try{await cvSaveGateway(cvMusicFields);await cvFetch('/music_config?'+new URLSearchParams({action:'save',route:document.getElementById('cv-music-route').value}));await cvFetch('/voice_volume?target=music&operation=set&percent='+document.getElementById('cv-music-volume').value);await cvLoadVolume('music');cvMusicPath();document.getElementById('cv-music-status').textContent='音乐设置已保存';}catch(e){document.getElementById('cv-music-status').textContent=e.message;}finally{b.disabled=false;}}
 async function cvHealth(){cvStatus('正在检查网关…');try{let d=await cvFetch('/voice_health');cvStatus(d.ready?'N1 语音网关已连接；云服务效果请用播报或真实语音测试':'网关未就绪');}catch(e){cvStatus(e.message);}}
 async function cvTest(b){b.disabled=true;try{await cvFetch('/voice_test');cvStatus('播报测试已发送，请留意音箱声音');}catch(e){cvStatus(e.message);}finally{b.disabled=false;}}
+document.getElementById('cv-gw-tts_model').addEventListener('input',cvSyncTtsVoices);
+cvSyncTtsVoices();
 cvConsolidate();document.getElementById('cv-asr').addEventListener('change',cvToggleAsr);document.getElementById('cv-music-route').addEventListener('change',cvMusicPath);cvLoad();

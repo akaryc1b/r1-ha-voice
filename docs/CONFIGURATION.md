@@ -114,3 +114,7 @@ ai_first_reply_timeout_ms（8000）、ai_answer_timeout_ms（30000）。
 R1的 `listen_music_mute` 默认true，8080可关闭。仅真实voice会话以API22的同一AudioManager/Binder申请临时Music3静音，启动失败、换轮、看门狗和finally均成对释放；不写音乐volume索引，不静音speech2。不是把音量记为旧值后强制覆盖回去。
 
 日志设置独立保存在N1 `r1-cloud-voice/diagnostic-logs` 中，由8080“日志”控制。默认disabled/INFO，开启后才保存；读等级不改写未保存表单，关闭不删除历史，清空使用generation防止旧批次复活。详细字段和测试见[日志说明](voice-logs.md)。
+
+### 云端播报音色选择
+
+8080 → 语音识别与播报 → 回答播报选择“云端 TTS”后，“播报音色”使用下拉框。CosyVoice2 提供八种带中文名称的预置音色；列表来源于 [硅基流动官方语音合成文档](https://docs.siliconflow.cn/docs/userguide/capabilities/text-to-speech)，实际支持以所用接口为准。选择“自定义音色 ID”可填写克隆音色或其他模型的音色。读取配置、切换模型不会自动覆盖已保存的音色 ID；选好后点击“保存语音设置”，下一次播报生效。
