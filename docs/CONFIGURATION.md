@@ -133,6 +133,8 @@ R1的 `listen_music_mute` 默认true，8080可关闭。仅真实voice会话以AP
 
 HA 的 queue_id、provider、r1_url、ma_url 使用 ha/r1_settings.yaml 统一输入，再由 render_config.py 生成部署文件。MA 优化从进程环境 R1_MA_QUEUE_ID 读取目标队列，须与该设置及网关队列一致；环境变更需重启MA，不由网页隐式改容器环境。
 
+MA 环境变量 `R1_APPLE_SEQUENTIAL_SEEK_MAX_SECONDS` 控制 Apple 加密 MP4 顺序读取的续播上限，整数 0～600 秒，默认 120 秒。范围内从头读取、解码后准确截取；更远跳转沿用原 HTTP Range，避免读取过长前缀。设为 0 只优化从头起播，修改后重启 MA。它不改变音频编码、采样率或 Snapcast 缓冲，也不由 8080 语音模型设置修改。
+
 分类、请求前后缀、同音修正和中文音量数字规则只维护 gateway/intent-rules.json，由生成器编入Java，Python读取同一份JSON。改规则需重启网关并重建客户端；日常改ASR/TTS模型仍只需网页保存。中文数字只在完整音量请求中转成0到100的数字，歌名和普通问答不做数字替换；HA也拒绝无法识别或越界的值，不再静默转为0。
 
 新客户端访问网关/asr时显式使用audio_format=pcm_s16le，16kHz单声道PCM16小端；网关仍接受旧客户端默认Float32。离线直连Sherpa继续使用Float32。不要在PCM16客户端连接旧网关前先单独升级客户端。

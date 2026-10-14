@@ -44,30 +44,97 @@
                      self.logger.warning("Failed to get song stream metadata: %s", exc)
 --- a/controllers/player_queues/stream_feeder.py
 +++ b/controllers/player_queues/stream_feeder.py
-@@ -10,6 +10,7 @@
+@@ -10,6 +10,8 @@
  from __future__ import annotations
  
  import asyncio
 +import os
++from copy import copy
  from typing import TYPE_CHECKING
  
  from music_assistant_models.enums import (
-@@ -28,6 +29,11 @@
- from music_assistant.controllers.player_queues.base import _PlayerQueuesBase
+@@ -29,6 +31,11 @@
  from music_assistant.controllers.streams.constants import STREAM_SLOT_WAIT_TIMEOUT
  from music_assistant.models.music_provider import MusicProvider
-+
+ 
 +R1_MA_QUEUE_ID = os.environ.get("R1_MA_QUEUE_ID", "upbac50e55").strip()
 +if not R1_MA_QUEUE_ID:
 +    raise ValueError("R1_MA_QUEUE_ID must not be empty")
 +
- 
++
  if TYPE_CHECKING:
      from music_assistant_models.queue_item import QueueItem
-@@ -258,6 +264,29 @@
+ 
+@@ -53,6 +60,7 @@
+         if next_item is None or next_item.queue_item_id == queue_item_id:
+             return None
+         queue_data = self._queue_data[queue_id]
++        preparation_session = queue_data.session_id
+         # AudioSource items are realtime/live and bypass the AudioBuffer
+         if next_item.media_type == MediaType.AUDIO_SOURCE:
+             return None
+@@ -73,6 +81,8 @@
+                 try:
+                     prepared_item = await self.load_next_queue_item(queue_id, queue_item_id)
+                 except QueueEmpty:
++                    return
++                if queue_id == R1_MA_QUEUE_ID and queue_data.session_id != preparation_session:
+                     return
+                 # unplayable items are skipped, so the prepared item can be a later one
+                 queue_data.next_item_id_preparing = prepared_item.queue_item_id
+@@ -131,6 +141,8 @@
+                     and (sd := prepared_item.streamdetails)
+                     and (buf := sd.buffer)
+                     and buf.is_buffering
++                    # 前台切歌接管后，旧预热任务不能撤销新会话的缓存。
++                    and (queue_id != R1_MA_QUEUE_ID or sd.queue_session_id == preparation_session)
+                 ):
+                     await asyncio.shield(buf.clear())
+                 raise
+@@ -257,6 +269,68 @@
+ 
          task_id = f"enqueue_next_item_{queue_id}"
          self.mass.call_later(1, _enqueue_next_item_on_player, next_item, task_id=task_id)
- 
++
++    async def _preload_r1_idle_resume(self, queue_id: str, item_id: str, attempt: int = 0) -> None:
++        """启动时只准备现有待机曲目的播放详情，不收音、不创建 PCM 流。"""
++        data = self._queue_data.get(queue_id)
++        if data is None or data.queue.state != PlaybackState.IDLE or data.transitioning:
++            return
++        current = data.queue.current_item
++        item = self.get_item(queue_id, item_id)
++        if current is None or current.queue_item_id != item_id or item is None or item.media_type != MediaType.TRACK:
++            return
++        session = data.session_id
++        original_details = item.streamdetails
++        candidate = copy(item)
++        if original_details is not None:
++            candidate.streamdetails = copy(original_details)
++        try:
++            await asyncio.wait_for(self._load_item(candidate), timeout=8)
++        except (AudioError, MediaNotFoundError, TimeoutError) as error:
++            self.logger.info("R1 idle details prefetch unavailable: %s", type(error).__name__)
++            # 音源可能晚于队列就绪；仅启动预取有界重试，不周期取流。
++            if isinstance(error, MediaNotFoundError) and attempt < 3:
++                self.mass.call_later(
++                    5, self._preload_r1_idle_resume, queue_id, item_id, attempt + 1,
++                    task_id=f"r1_idle_details_retry_{queue_id}",
++                )
++            return
++        if (
++            self._queue_data.get(queue_id) is data
++            and data.session_id == session
++            and data.queue.state == PlaybackState.IDLE
++            and not data.transitioning
++            and data.queue.current_item is current
++            and self.get_item(queue_id, item_id) is item
++            and item.streamdetails is original_details
++        ):
++            item.streamdetails = candidate.streamdetails
++            if current is not item:
++                current.streamdetails = candidate.streamdetails
++            self.logger.info("R1_IDLE_DETAILS_PREFETCH ready=true")
++
 +    async def _preload_r1_manual_successor(self, queue_id: str, current_item_id: str) -> None:
 +        """Prepare manual-next details when repeat-one selects the current track."""
 +        queue = self._queue_data[queue_id].queue
@@ -90,11 +157,10 @@
 +            self.logger.debug("R1 manual-next prefetch unavailable: %s", type(err).__name__)
 +            return
 +        self.logger.info("R1_MANUAL_NEXT_PREFETCH ready=true")
-+
+ 
      def _preload_next_item(self, queue_id: str, item_id_in_buffer: str) -> None:
          """
-         Preload the streamdetails for the next item in the queue/buffer.
-@@ -293,6 +322,11 @@
+@@ -293,6 +367,11 @@
                      )
                      # enqueue the next item on the player
                      self._enqueue_next_item(queue_id, next_item)
@@ -365,7 +431,7 @@
          # same registry as the single-item route: a forced-flow player (overlay)
 --- a/controllers/streams/audio.py
 +++ b/controllers/streams/audio.py
-@@ -162,6 +162,11 @@
+@@ -162,6 +162,15 @@
  )
  from music_assistant.models.music_provider import MusicProvider, ProviderStreamLimitError
  
@@ -373,11 +439,15 @@
 +if not R1_MA_QUEUE_ID:
 +    raise ValueError("R1_MA_QUEUE_ID must not be empty")
 +
++R1_APPLE_SEQUENTIAL_SEEK_MAX_SECONDS = int(os.environ.get("R1_APPLE_SEQUENTIAL_SEEK_MAX_SECONDS", "120"))
++if not 0 <= R1_APPLE_SEQUENTIAL_SEEK_MAX_SECONDS <= 600:
++    raise ValueError("R1_APPLE_SEQUENTIAL_SEEK_MAX_SECONDS must be between 0 and 600")
++
 +
  if TYPE_CHECKING:
      from music_assistant_models.media_items import ProviderMapping
      from music_assistant_models.player_queue import PlayerQueue
-@@ -346,6 +351,26 @@
+@@ -346,6 +355,26 @@
          overshoot.extend(next_chunk[remaining:])
          taken += len(part)
          yield part
@@ -404,7 +474,7 @@
  
  
  class _IncomingFadePrefetcher:
-@@ -2400,6 +2425,16 @@
+@@ -2400,6 +2429,16 @@
                          queue.display_name,
                      )
                      continue
@@ -421,7 +491,7 @@
                  # re-read the effective crossfade settings so a change applies at the
                  # next track transition instead of the next stream session; a realtime
                  # source still gets its fade decided from what its boundary can
-@@ -2558,7 +2593,15 @@
+@@ -2558,7 +2597,15 @@
                      overlay_enabled=overlay_active(queue),
                  )
                  # append to play log so the queue controller can work out which track is playing
@@ -438,7 +508,7 @@
                  flow_log.append(play_log_entry)
  
                  bytes_written = 0
-@@ -2820,6 +2863,8 @@
+@@ -2820,6 +2867,8 @@
                      if last_fadeout_part:
                          # crossfade into this item never happened — undo the eager seek_position
                          queue_track.streamdetails.seek_position = raw_seek_position
@@ -447,7 +517,7 @@
                      continue
  
                  #### HANDLE END OF TRACK
-@@ -2834,6 +2879,8 @@
+@@ -2834,6 +2883,8 @@
                      play_log_entry.seconds_streamed = 0
                      if last_fadeout_part:
                          queue_track.streamdetails.seek_position = raw_seek_position
@@ -456,7 +526,7 @@
                      continue
                  if last_fadeout_part:
                      # edge case: we did not get enough data to make the crossfade
-@@ -2877,6 +2924,8 @@
+@@ -2877,6 +2928,8 @@
                  seconds_streamed = bytes_written / pcm_sample_size
                  queue_track.streamdetails.seconds_streamed = seconds_streamed
                  play_log_entry.seconds_streamed = seconds_streamed
@@ -465,26 +535,46 @@
                  # an externally aborted source ends in a clean EOF mid-track, so the
                  # streamed length must not be written back as the item's duration
                  source_buffer = queue_track.streamdetails.buffer
-@@ -3862,6 +3911,18 @@
-             and "-readrate" not in extra_input_args
+@@ -3863,9 +3916,29 @@
          ):
              extra_input_args += ["-readrate", "1", "-readrate_initial_burst", "0.5"]
+ 
++        r1_sequential_apple = False
++        extra_output_args = []
 +
 +        # Apple catalog MP4 is fragmented with its initialization box at the head.
 +        # Sequential reads avoid scanning every remote fragment before first PCM.
-+        # Real source seeks retain normal HTTP range support.
++        # 短距离续播沿用顺序读取；较远 seek 保留 HTTP range，避免读取整段前缀。
 +        if (
 +            streamdetails.queue_id == R1_MA_QUEUE_ID
 +            and streamdetails.provider.startswith("apple_music--")
 +            and streamdetails.stream_type == StreamType.ENCRYPTED_HTTP
-+            and seek_position == 0
++            and 0 <= seek_position <= R1_APPLE_SEQUENTIAL_SEEK_MAX_SECONDS
 +            and "-seekable" not in extra_input_args
 +        ):
 +            extra_input_args += ["-seekable", "0"]
- 
++            r1_sequential_apple = True
++
          # handle seek support
          if seek_position and streamdetails.duration and streamdetails.allow_seek:
-@@ -3940,6 +4001,13 @@
+-            extra_input_args += ["-ss", str(int(seek_position))]
++            if r1_sequential_apple:
++                # 顺序解码再截取，保留 AAC 历史样本，使续播与连续播放的 PCM 一致。
++                extra_output_args += ["-ss", str(int(seek_position))]
++            else:
++                extra_input_args += ["-ss", str(int(seek_position))]
+ 
+         bytes_sent = 0
+         finished = False
+@@ -3879,6 +3952,7 @@
+             output_format=pcm_format,
+             filter_params=filter_params,
+             extra_input_args=extra_input_args,
++            extra_output_args=extra_output_args,
+             collect_log_history=True,
+             loglevel=ffmpeg_loglevel,
+         )
+@@ -3940,6 +4014,13 @@
                          mass.loop.time() - stream_start,
                          ffmpeg_proc.input_format.codec_type,
                      )
@@ -539,7 +629,19 @@
              self.play_index,
              queue_id,
              prev_index,
-@@ -1372,12 +1379,42 @@
+@@ -1244,6 +1251,11 @@
+         # always call update to calculate state etc
+         self.on_player_update(player, {})
+         self.mass.signal_event(EventType.QUEUE_ADDED, object_id=queue_id, data=queue_data.queue)
++        if queue_id == R1_MA_QUEUE_ID and (item := queue_data.queue.current_item):
++            self.mass.create_task(
++                self._preload_r1_idle_resume, queue_id, item.queue_item_id,
++                task_id=f"r1_idle_details_{queue_id}", abort_existing=True,
++            )
+ 
+     def on_player_update(
+         self,
+@@ -1372,12 +1384,42 @@
              if idx >= 10:
                  # we only allow 10 retries to prevent infinite loops
                  raise QueueEmpty("No more (playable) tracks left in the queue.")
@@ -582,7 +684,7 @@
                  # we're all set, this is our next item
                  next_item = queue_item
                  break
-@@ -1390,6 +1427,12 @@
+@@ -1390,6 +1432,12 @@
                      "Skipping unplayable item %s (%s): %s", queue_item.name, queue_item.uri, err
                  )
                  queue_item.available = False

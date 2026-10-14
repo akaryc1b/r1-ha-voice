@@ -28,6 +28,12 @@ class PatchLifecycleTests(unittest.TestCase):
             if 'previous_after_sha256' not in item:continue
             transition={'path':item['path'],'before_sha256':item['previous_after_sha256'],'after_sha256':item['after_sha256']}
             cls.previous[item['path']]=tool.transform(cls.after[item['path']],transition,migration[item['path']],reverse=True)
+        upgrades=tool.read_upgrade(cls.manifest)
+        cls.upgrade_from=dict(cls.after)
+        for item in cls.manifest['files']:
+            if 'upgrade_from_sha256' not in item:continue
+            transition={'path':item['path'],'before_sha256':item['upgrade_from_sha256'],'after_sha256':item['after_sha256']}
+            cls.upgrade_from[item['path']]=tool.transform(cls.after[item['path']],transition,upgrades[item['path']],reverse=True)
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix='r1-ma-patch-test-')
@@ -77,6 +83,16 @@ class PatchLifecycleTests(unittest.TestCase):
         tool.maintain(self.base,'check')
         tool.maintain(self.base,'apply')
         self.assertEqual(self.actual(),self.after)
+        tool.maintain(self.base,'restore')
+        self.assertEqual(self.actual(),self.before)
+
+    def test_deployed_optimized_state_upgrades_without_replacing_unknown_source(self):
+        for path,data in self.upgrade_from.items():(self.base/path).write_bytes(data)
+        tool.maintain(self.base,'check')
+        self.assertEqual(self.actual(),self.upgrade_from)
+        tool.maintain(self.base,'apply')
+        self.assertEqual(self.actual(),self.after)
+        for path,data in self.upgrade_from.items():(self.base/path).write_bytes(data)
         tool.maintain(self.base,'restore')
         self.assertEqual(self.actual(),self.before)
 

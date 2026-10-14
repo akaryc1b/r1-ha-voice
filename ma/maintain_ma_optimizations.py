@@ -87,6 +87,11 @@ def read_migrations(manifest):
     return checked_patch(manifest, "previous_patch", paths)
 
 
+def read_upgrade(manifest):
+    paths = [item["path"] for item in manifest["files"] if "upgrade_from_sha256" in item]
+    return checked_patch(manifest, "upgrade_patch", paths) if paths else {}
+
+
 def transform(data, item, hunks, reverse=False):
     """精确匹配行位置与内容，不搜索、不模糊套用。"""
     source = normalized(data)
@@ -172,6 +177,7 @@ def replace_bytes(path, data):
 def maintain(base, action):
     manifest, patches = read_bundle()
     migrations = read_migrations(manifest)
+    upgrades = read_upgrade(manifest)
     plan = []
     for item in manifest["files"]:
         target = (base / relative_path(item["path"])).resolve()
@@ -181,19 +187,21 @@ def maintain(base, action):
         current = normalized(original)
         digest = sha(current)
         previous = digest == item.get("previous_after_sha256")
-        if digest not in (item["before_sha256"], item["after_sha256"]) and not previous:
+        upgrade = digest == item.get("upgrade_from_sha256")
+        if digest not in (item["before_sha256"], item["after_sha256"]) and not (previous or upgrade):
             raise ValueError("MA 源码不属于已验证版本：" + item["path"])
         before = digest == item["before_sha256"]
-        if previous:
-            transition = {"path":item["path"], "before_sha256":item["previous_after_sha256"],
+        if previous or upgrade:
+            source_key = "previous_after_sha256" if previous else "upgrade_from_sha256"
+            transition = {"path":item["path"], "before_sha256":item[source_key],
                           "after_sha256":item["after_sha256"]}
-            current = transform(current, transition, migrations[item["path"]])
+            current = transform(current, transition, (migrations if previous else upgrades)[item["path"]])
         # 预览同样核对 hunk 和最终哈希；先验证所有文件再写入。
         opposite = transform(current, item, patches[item["path"]], reverse=not before)
         payload = opposite if ((action == "apply" and before) or (action == "restore" and not before)) else original
-        if action == "apply" and previous:
+        if action == "apply" and (previous or upgrade):
             payload = current
-        state = "previous-optimized" if previous else "original" if before else "optimized"
+        state = "previous-optimized" if previous else "upgrade-from-optimized" if upgrade else "original" if before else "optimized"
         plan.append((target, original, payload, item["path"], state))
     written = []
     if action != "check":
