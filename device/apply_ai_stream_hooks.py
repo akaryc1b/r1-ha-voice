@@ -22,7 +22,11 @@ def apply(root):
     path = root / "smali/com/phicomm/speaker/device/custom/handler/PhicommChatHandler.smali"
     source = path.read_text(encoding="utf-8")
     marker = ".method public onTTSEventPlayingEnd(Lcom/unisound/vui/engine/ANTHandlerContext;)Z\n    .registers 6\n"
-    if ":r1_ai_stream_regular_end" not in source:
+    start = source.index(".method public onTTSEventPlayingEnd(")
+    end = source.index(".end method", start)
+    body = source[start:end]
+    # baksmali 会重命名分支标签；以调用契约识别已有挂钩。
+    if "VoiceAiStream;->onSpeechEnd(" not in body:
         assert marker in source
         source = source.replace(marker, marker + """
     invoke-static {p0}, Lr1/local/asr/VoiceAiStream;->onSpeechEnd(Ljava/lang/Object;)Z

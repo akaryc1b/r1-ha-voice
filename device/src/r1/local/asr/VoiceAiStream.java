@@ -11,6 +11,8 @@ import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayDeque;
+import java.util.Arrays;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Timer;
 import java.util.TimerTask;
 import org.json.JSONArray;
@@ -154,16 +156,16 @@ public final class VoiceAiStream {
     }
 
     private static Request request(Object client, String question, String history, boolean stream) throws Exception {
-        Method builder = client.getClass().getDeclaredMethod("buildRequestBody", String.class, String.class, String.class);
+        Method builder = method(client.getClass(),"buildRequestBody",String.class,String.class,String.class);
         builder.setAccessible(true);
         JSONObject body = new JSONObject((String) builder.invoke(client, question, history, null));
         body.put("stream", stream);
         VoiceDiagnostics.record("DEBUG","AI",VoiceSession.currentTurn(),"status","request","model",body.optString("model",""));
-        Field configField = client.getClass().getDeclaredField("config");
+        Field configField = field(client.getClass(),"config");
         configField.setAccessible(true);
         Object config = configField.get(client);
-        String base = (String) config.getClass().getMethod("getBaseUrl").invoke(config);
-        String key = (String) config.getClass().getMethod("getApiKey").invoke(config);
+        String base = (String) method(config.getClass(),"getBaseUrl").invoke(config);
+        String key = (String) method(config.getClass(),"getApiKey").invoke(config);
         String url = base.endsWith("/chat/completions") ? base : base.replaceAll("/+$", "") + "/chat/completions";
         return new Request(url, key, body);
     }
@@ -285,15 +287,19 @@ public final class VoiceAiStream {
     }
 
     static int sentenceEnd(CharSequence text) {
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            boolean punctuation = "。！？!?；;\n".indexOf(c) >= 0;
-            if (punctuation && i + 1 >= 12) return i + 1;
+        for (int i=0;i<text.length();i++) {
+            char c=text.charAt(i);
+            boolean sentence="。！？!?；;\n".indexOf(c)>=0 && i+1>=4;
+            boolean clause="，,、".indexOf(c)>=0 && i+1>=15;
+            if ((sentence || clause) && !filler(text.subSequence(0,i+1).toString())) return i+1;
         }
-        // 超长段落在自然逗号处断开，避免中文问答一直等不到句末。
-        if (text.length() >= 100) for (int i = 80; i < text.length(); i++)
-            if ("，,、".indexOf(text.charAt(i)) >= 0) return i + 1;
         return -1;
+    }
+
+    private static boolean filler(String text) {
+        String clean=text.replaceAll("[\\s，。！？、,.!?；;]","");
+        return clean.matches("(好的|好|可以|没问题|当然可以)?(我来|让我|下面我来|这就)?"+
+                "(为你|帮你)?(解释|介绍|说明|回答)?(一下|这个问题)?");
     }
 
     private static boolean current(Reply reply) {
@@ -311,7 +317,7 @@ public final class VoiceAiStream {
                 try {
                     Field field = field(reply.handler.getClass(), "ctx");
                     Object context = field.get(reply.handler);
-                    reply.handler.getClass().getMethod("onTTSEventPlayingEnd", Class.forName("com.unisound.vui.engine.ANTHandlerContext"))
+                    method(reply.handler.getClass(),"onTTSEventPlayingEnd",Class.forName("com.unisound.vui.engine.ANTHandlerContext"))
                             .invoke(reply.handler, context);
                 } catch (Exception error) { Log.w("R1AIStream", "END_FAILED " + error.getClass().getSimpleName()); }
             }});
@@ -331,7 +337,7 @@ public final class VoiceAiStream {
             }
             try {
                 Log.i("R1AIStream", "SPEAK characters=" + text.length());
-                reply.handler.getClass().getMethod("playTTS", String.class).invoke(reply.handler, text);
+                method(reply.handler.getClass(),"playTTS",String.class).invoke(reply.handler, text);
             } catch (Exception error) {
                 synchronized (VoiceAiStream.class) { reply.playing = false; reply.cancelled = true; }
                 Log.w("R1AIStream", "SPEAK_FAILED " + error.getClass().getSimpleName());
@@ -356,7 +362,7 @@ public final class VoiceAiStream {
             if (!VoiceSession.isCurrent(turn)) return;
             if (active != null && active.handler == handler && active.turn == turn && !active.cancelled && (active.spoken || active.playing || !active.pending.isEmpty())) return;
         }
-        try { handler.getClass().getMethod("playTTS", String.class).invoke(handler, text); }
+        try { method(handler.getClass(),"playTTS",String.class).invoke(handler, text); }
         catch (Exception error) { Log.w("R1AIStream", "REPLY_FAILED " + error.getClass().getSimpleName()); }
     }
 
@@ -370,10 +376,55 @@ public final class VoiceAiStream {
         disconnectAsync(reply.connection);
     }
 
-    private static Field field(Class<?> type, String name) throws Exception {
-        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
-            try { Field field = current.getDeclaredField(name); field.setAccessible(true); return field; }
-            catch (NoSuchFieldException ignored) {}
+    private static final ConcurrentHashMap<Class<?>,ConcurrentHashMap<MethodKey,Method>> METHODS =
+            new ConcurrentHashMap<Class<?>,ConcurrentHashMap<MethodKey,Method>>();
+    private static final ConcurrentHashMap<Class<?>,ConcurrentHashMap<String,Field>> FIELDS =
+            new ConcurrentHashMap<Class<?>,ConcurrentHashMap<String,Field>>();
+
+    private static final class MethodKey {
+        final String name;
+        final Class<?>[] parameters;
+        MethodKey(String name,Class<?>[] parameters){this.name=name;this.parameters=parameters.clone();}
+        public int hashCode(){return 31*name.hashCode()+Arrays.hashCode(parameters);}
+        public boolean equals(Object other){
+            if(!(other instanceof MethodKey))return false;
+            MethodKey key=(MethodKey)other;
+            return name.equals(key.name)&&Arrays.equals(parameters,key.parameters);
+        }
+    }
+
+    private static Method method(Class<?> type,String name,Class<?>... parameters) throws Exception {
+        ConcurrentHashMap<MethodKey,Method> cache=METHODS.get(type);
+        if(cache==null){
+            ConcurrentHashMap<MethodKey,Method> created=new ConcurrentHashMap<MethodKey,Method>();
+            ConcurrentHashMap<MethodKey,Method> previous=METHODS.putIfAbsent(type,created);
+            cache=previous==null?created:previous;
+        }
+        MethodKey key=new MethodKey(name,parameters);Method found=cache.get(key);
+        if(found!=null)return found;
+        for(Class<?> current=type;current!=null;current=current.getSuperclass()){
+            try{
+                found=current.getDeclaredMethod(name,parameters);found.setAccessible(true);
+                Method previous=cache.putIfAbsent(key,found);return previous==null?found:previous;
+            }catch(NoSuchMethodException ignored){}
+        }
+        found=type.getMethod(name,parameters);found.setAccessible(true);
+        Method previous=cache.putIfAbsent(key,found);return previous==null?found:previous;
+    }
+
+    private static Field field(Class<?> type,String name) throws Exception {
+        ConcurrentHashMap<String,Field> cache=FIELDS.get(type);
+        if(cache==null){
+            ConcurrentHashMap<String,Field> created=new ConcurrentHashMap<String,Field>();
+            ConcurrentHashMap<String,Field> previous=FIELDS.putIfAbsent(type,created);
+            cache=previous==null?created:previous;
+        }
+        Field found=cache.get(name);if(found!=null)return found;
+        for(Class<?> current=type;current!=null;current=current.getSuperclass()){
+            try{
+                found=current.getDeclaredField(name);found.setAccessible(true);
+                Field previous=cache.putIfAbsent(name,found);return previous==null?found:previous;
+            }catch(NoSuchFieldException ignored){}
         }
         throw new NoSuchFieldException(name);
     }

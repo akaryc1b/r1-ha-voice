@@ -6,6 +6,8 @@
 
 [安装教程](docs/INSTALL.md) · [配置说明](docs/CONFIGURATION.md) · [备份与恢复](docs/BACKUP_RESTORE.md)
 
+[![CI](https://github.com/akaryc1b/r1-ha-voice/actions/workflows/ci.yml/badge.svg)](https://github.com/akaryc1b/r1-ha-voice/actions/workflows/ci.yml)
+
 ## 能做什么
 
 | 功能 | 使用方式 |
@@ -50,6 +52,8 @@
 
 详细依赖、下载来源和启动命令见 [N1 安装教程](docs/INSTALL.md)。
 
+已有 N1 可以沿用当前部署。新部署还可选择 [独立语音容器](deployment/README.md)，将网关和断句服务放在一个容器里；它不代替 HA / MA，也不需要与原语音服务同时运行。
+
 ## 安装顺序
 
 1. **准备 N1 环境。** 保留已有 HA / MA，安装本地断句服务和语音网关。
@@ -59,6 +63,8 @@
 5. **逐项试用。** 先在 MA 播放音乐，再测试语音暂停、点歌、温湿度和问答。
 
 第一次安装请从 [完整教程](docs/INSTALL.md) 开始。教程中的 IP、播放器 ID、容器名和实体都是部署示例，需要替换成自己的值。
+
+HA 的地址、队列和音乐来源集中写在一份设置中，再生成部署文件。播放卡片支持 [HACS 自定义仓库安装](docs/HACS.md)；安装卡片后，仍需导入音乐脚本和面板。
 
 ## 网页在哪里打开？
 
@@ -118,6 +124,8 @@
 
 “播放”通常继续当前队列；“随机播放点音乐”“来点音乐”选择随机歌单。“国语精选”目前作为国语流行风格搜索，不保证命中自己创建的同名歌单。
 
+使用直连 MA 时，可在“音乐播放与音源”修改随机听歌的默认搜索词和音乐来源；留空来源表示不限来源，点击“保存音乐设置”生效。
+
 ## 常见问题
 
 **MA 装进 HA 就不用再运行服务了吗？**
@@ -151,6 +159,7 @@ Apple Music 取流、服务端准备和 R1 缓冲都会影响等待。后台准�
 | 安装或迁移到另一台 N1 | [安装教程](docs/INSTALL.md) |
 | 查看模型、音色、音量和超时设置 | [配置说明](docs/CONFIGURATION.md) |
 | 设置 Snapcast 输出 | [Snapcast 配置](ma/snapcast/README.md) |
+| 安装或更新 HA 播放卡片 | [HACS 安装](docs/HACS.md) |
 | 调整点歌说法 | [音乐规则](ha/README.md) |
 | 构建和安装 R1 客户端 | [构建说明](docs/BUILD.md) |
 | 查看测试范围和性能 | [验证记录](docs/TESTING.md) · [性能记录](docs/PERFORMANCE.md) |

@@ -1,6 +1,7 @@
 """单曲循环的手动下一首预取不得启动第二条音频流。"""
 import ast
 import asyncio
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -15,8 +16,10 @@ class MediaNotFoundError(Exception):
     pass
 
 
-SOURCE = Path(__file__).resolve().parents[1] / "ma/ma-final/ma-stream-feeder.prewarm.py"
-tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'ma'))
+from maintain_ma_optimizations import optimized_source
+SOURCE = Path('controllers/player_queues/stream_feeder.py')
+tree = ast.parse(optimized_source(SOURCE.as_posix()))
 original = next(node for node in tree.body if isinstance(node, ast.ClassDef))
 method = next(node for node in original.body
               if isinstance(node, ast.AsyncFunctionDef)

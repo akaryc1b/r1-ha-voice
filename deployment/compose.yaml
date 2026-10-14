@@ -1,0 +1,31 @@
+name: r1-voice-optional
+services:
+  voice:
+    image: r1-ha-voice:local
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    network_mode: host
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 20s
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      R1_BIND_HOST: ${R1_BIND_HOST:-0.0.0.0}
+      R1_BIND_PORT: ${R1_BIND_PORT:-16068}
+      R1_ALLOWED_CLIENTS: ${R1_ALLOWED_CLIENTS:-["127.0.0.1","192.168.1.3"]}
+      R1_MA_URL: ${R1_MA_URL:-http://127.0.0.1:8095}
+      R1_MA_QUEUE_ID: ${R1_MA_QUEUE_ID:-upbac50e55}
+      R1_R1_CONTROL_URL: ${R1_CONTROL_URL:-http://192.168.1.3:8080}
+    volumes:
+      - gateway-state:/data
+      - asr-models:/models
+    logging:
+      driver: local
+      options:
+        max-size: 1m
+        max-file: "2"
+volumes:
+  gateway-state:
+  asr-models:

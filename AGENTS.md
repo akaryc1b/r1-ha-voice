@@ -16,15 +16,15 @@
 | --- | --- |
 | 8080 页面 | `device/web/`、`device/generate_web.py` |
 | Android 收音、续听、音量、日志 | `device/src/r1/local/asr/`、`device/apply_*_hooks.py` |
-| 网关与配置 | `gateway/voice_gateway.py`、`gateway/gateway_config.py` |
+| 网关与配置 | `gateway/voice_gateway.py`、`gateway/gateway_config.py`、`gateway/intent-rules.json` |
 | 日志存储 | `gateway/event_log.py`、`docs/voice-logs.md` |
 | HA 音乐语义 | `ha/custom_sentences/`、`ha/packages/`、`ha/README.md` |
-| MA 优化 | `ma/ma-optimizations-manifest.json`、`ma/ma-final/` |
+| MA 优化 | `ma/ma-optimizations-manifest.json`、`ma/ma-optimizations.patch`、`ma/maintain_ma_optimizations.py` |
 | Snapcast 与硬件音量 | `ma/snapcast/` |
 | 本地断句、启动服务 | `asr/`、`services/`、`docs/INSTALL.md` |
 | 客户端构建安装 | `device/build_client.py`、`tools/flash_r1.py`、`docs/BUILD.md` |
 
-`device/build-report.json` 标识匹配的客户端产物。日期化文档可能包含历史 APK 哈希、模型主备顺序和部署参数，不凭旧记录推断当前设备状态。
+`device/base-apk.json` 保存允许的构建输入契约，`device/build/build-report.json` 是被忽略的本次输出。日期化文档可能包含历史 APK 哈希、模型主备顺序和部署参数，不凭旧记录推断当前设备状态。
 
 ## 环境边界
 
@@ -44,7 +44,7 @@
 - 不重置已保存的唤醒词，不恢复旧云知声识别或闲聊回退。
 - 密钥只回读配置状态；留空保留，显式勾选才清除，校验失败不覆盖原配置。
 - 音色下拉框保留自定义 ID；未知模型不虚构音色，读取和切换模型不自动覆盖原值。
-- HA 句式是音乐语义来源，通过 `ha/generate_music_commands.py` 生成核心表，不维护重复同义词表。
+- HA 句式是音乐语义来源，通过 `ha/generate_music_commands.py` 生成核心表；前缀、纠错和分类使用 `gateway/intent-rules.json`，Java由 `tools/generate_intent_rules.py` 生成，不维护第二套规则。
 - “播放”恢复原队列，泛泛随机请求选新歌单，具体歌名和风格保留查询。
 - 暂停/停止抢占尚未提交的慢搜索；已提交 MA 的播放不可事务撤回，不声称可以回滚。
 - HA / 网关使用同一逻辑队列，通过 MA 配置迁移协议，不直接改数据库播放器 ID。
@@ -83,3 +83,12 @@ HA 规则检查依赖其 `hassil` 与模板环境，网关检查依赖 `aiohttp`
 - FLAC 传输不能证明 Apple 源无损或硬件链路 bit-perfect。
 - 已验证版本不代表最新上游；升级后重新检查兼容性。
 - 更新对应使用说明和验证记录，区分配置、合成、真人测试，不用历史成绩冒充本次结果。
+
+
+## 当前交付入口
+
+- `deployment/` 为可选独立语音容器，不会自动迁移当前 N1 服务；镜像需实际 Linux CI 构建验证。
+- `ha/packages/` 和仪表盘为 token 模板，先运行 `ha/render_config.py`，不原样复制到 HA。
+- `r1-ha-voice.js` 为 HACS 单一卡片入口，元素名仍为 `r1-player-card`。
+- `tools/run_checks.py` 与 CI 使用同一组命令，结果放 ignored `reports/` 并上传 Actions Artifacts，不提交每次测试快照。
+- 新客户端网关上行为 PCM16，旧 Float32 仍兼容；离线 Sherpa 连接保持 Float32。网关组装 WAV 不转换采样值，但拼接仍有内存复制。

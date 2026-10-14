@@ -5,6 +5,8 @@ import ast
 import asyncio
 import contextvars
 import json
+import os
+import sys
 import time
 import unittest
 from dataclasses import dataclass, field
@@ -14,7 +16,9 @@ from types import SimpleNamespace as NS
 from typing import cast
 
 ROOT = Path(__file__).resolve().parents[1]
-TARGET = ROOT / 'ma/ma-final/ma-queue-loader.trace.py'
+sys.path.insert(0, str(ROOT / 'ma'))
+from maintain_ma_optimizations import optimized_source
+TARGET = Path('controllers/player_queues/queue_loader.py')
 
 
 class MediaType(str, Enum):
@@ -138,7 +142,10 @@ class AsyncProxy:
 
 
 ASYNC = AsyncProxy()
-module = ast.parse(TARGET.read_text(encoding='utf-8'))
+module = ast.parse(optimized_source(TARGET.as_posix()))
+setting = next(x for x in module.body if isinstance(x, ast.Assign) and
+               any(isinstance(t, ast.Name) and t.id == 'R1_MA_QUEUE_ID' for t in x.targets))
+exec(compile(ast.Module(body=[setting], type_ignores=[]), str(TARGET), 'exec'), globals())
 source_class = next(x for x in module.body if isinstance(x, ast.ClassDef) and x.name == 'QueueLoaderMixin')
 methods = [x for x in source_class.body if getattr(x, 'name', '') in
            ('_load_item', '_can_defer_r1_artwork', '_refresh_r1_artwork')]
@@ -342,6 +349,26 @@ class ArtworkTests(unittest.IsolatedAsyncioTestCase):
         await h._load_item(h.item, is_start=True)
         self.assertEqual(h.item.media_item.image, 'album-cover')
         self.assertFalse(h.mass.tasks)
+
+    async def test_album_mapping_image_needs_no_provider_fetch(self):
+        h = Host()
+        h.item.media_item.album = NS(media_type='album', item_id='album1', provider='apple_music', image='mapped-cover')
+        await h._load_item(h.item, is_start=True)
+        self.assertEqual(h.item.media_item.metadata.images, ['mapped-cover'])
+        self.assertFalse(h.fetch_started.is_set())
+        self.assertFalse(h.mass.tasks)
+
+    async def test_configured_queue_only_can_defer_artwork(self):
+        method = RealLoader._can_defer_r1_artwork
+        original = method.__globals__['R1_MA_QUEUE_ID']
+        try:
+            method.__globals__['R1_MA_QUEUE_ID'] = 'custom-bedroom'
+            item = QueueItem(queue_id='custom-bedroom')
+            self.assertTrue(method(item, True))
+            item.queue_id = 'upbac50e55'
+            self.assertFalse(method(item, True))
+        finally:
+            method.__globals__['R1_MA_QUEUE_ID'] = original
 
     async def test_noneligible_listings_keep_full_lookup(self):
         mutations = {

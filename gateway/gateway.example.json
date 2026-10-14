@@ -28,5 +28,9 @@
     "127.0.0.1"
   ],
   "bind_host": "192.168.1.88",
-  "bind_port": 16068
+  "bind_port": 16068,
+  "default_random_query": "国语流行",
+  "default_random_providers": [
+    "apple_music"
+  ]
 }

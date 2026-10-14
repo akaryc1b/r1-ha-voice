@@ -3,50 +3,41 @@
   "files": [
     {
       "path": "providers/apple_music/streaming.py",
-      "before_file": "ma-apple-streaming.before-metadata-cache.py",
-      "after_file": "ma-apple-streaming.metadata-cache.py",
       "before_sha256": "0cab62c0a9b152aa11412f2303c5e843ad89d64660aa83ec61aaad899308cf6f",
       "after_sha256": "c749509c6e6f6f1cd1f000ee62182c5c983405f753e50a3bf79864b23595293d"
     },
     {
       "path": "controllers/player_queues/stream_feeder.py",
-      "before_file": "ma-stream-feeder.before-prewarm.py",
-      "after_file": "ma-stream-feeder.prewarm.py",
       "before_sha256": "15f24848a93c1937c99c6b2bca945dd1731c38d3ffd6990f4e15e1b2741b7e88",
-      "after_sha256": "aa6f609d99a67efe4bff06bc49ada446478531360409d084f8c5e9c7922a1f22"
+      "after_sha256": "0d980ef842bca4fd0c0b980bc97b21bfa9a140bc73cc14183f5b3b55e4e73c88",
+      "previous_after_sha256": "aa6f609d99a67efe4bff06bc49ada446478531360409d084f8c5e9c7922a1f22"
     },
     {
       "path": "controllers/player_queues/queue_loader.py",
-      "before_file": "ma-queue-loader.before-trace.py",
-      "after_file": "ma-queue-loader.trace.py",
       "before_sha256": "ead02948ca4450d3651d0c90683df16a16e8b6e23a040bf16b3eb877756e7a0e",
-      "after_sha256": "f302a47e1d220b5b54d01b7c1da7574cf2993787916925f38265567d138389ca"
+      "after_sha256": "bfd190d81fef9f427d8cf0e8102df30196f8dac3b55b69286e9aeeeb8c19bb44",
+      "previous_after_sha256": "f302a47e1d220b5b54d01b7c1da7574cf2993787916925f38265567d138389ca"
     },
     {
       "path": "controllers/streams/controller.py",
-      "before_file": "ma-streams-controller.before-r1-buffer.py",
-      "after_file": "ma-streams-controller.r1-buffer.py",
       "before_sha256": "382b30be1b3d3aa92f7717e8d72cbd684df6a684d516fee932851e06d46262f9",
-      "after_sha256": "5618ff490df541b64e4397403d0d6c041de9ea620588a3f6792b81c2315271f8"
+      "after_sha256": "87fce4e0c8a585f7f63549e3fb8494f592a15d71a193742757ef753746ded6dd",
+      "previous_after_sha256": "5618ff490df541b64e4397403d0d6c041de9ea620588a3f6792b81c2315271f8"
     },
     {
       "path": "controllers/streams/audio.py",
-      "before_file": "ma-audio.before-r1-sequential.py",
-      "after_file": "ma-audio.r1-sequential.py",
       "before_sha256": "8760c06cef4966917138983a5ea049a4de692ad18421b1043a8d6e15f4d1ccfd",
-      "after_sha256": "947401f58daf8b2cf37195e334085838bef5c80bb416405a64983a30f26c956d"
+      "after_sha256": "7bca5dfd436f16e21f4cf8604a36b3a646cb8f3cb1b100881fb833ad4ce43679",
+      "previous_after_sha256": "947401f58daf8b2cf37195e334085838bef5c80bb416405a64983a30f26c956d"
     },
     {
       "path": "controllers/player_queues/controller.py",
-      "before_file": "ma-queue-controller.before-r1-debounce.py",
-      "after_file": "ma-queue-controller.r1-debounce.py",
       "before_sha256": "3d610ee9b643a5a338104fbf13d67d2b680b7d4570bc7dfe2364e4d9712b4588",
-      "after_sha256": "65344e5169be3f7d45a7867add5d417035a1154e0a5448a4296609670706040a"
+      "after_sha256": "157a8a2090a1ab361a31ea52c5864ee029a333209db5d83e80c7f68198e77408",
+      "previous_after_sha256": "65344e5169be3f7d45a7867add5d417035a1154e0a5448a4296609670706040a"
     },
     {
       "path": "controllers/player_queues/playback_tracker.py",
-      "before_file": "ma-playback-tracker.before-flow-offset.py",
-      "after_file": "ma-playback-tracker.flow-offset.py",
       "before_sha256": "1a1273321b94f3e98dfc00eb7e056ea9fe50bf668c835d2c6d0e3f91148add99",
       "after_sha256": "e921d33a3f45f9857cef1ce4933d25fa756c2115362a11963bf5c2f57a8d7a63"
     }
@@ -58,5 +49,20 @@
   "r1_repeat_one_manual_successor_details_prefetch": true,
   "r1_artwork_deferred_off_playback_path": true,
   "r1_flow_occurrence_seek_isolated": true,
-  "r1_flow_completed_entries_release_buffer_references": true
+  "r1_flow_completed_entries_release_buffer_references": true,
+  "format_version": 2,
+  "music_assistant_version": "2.10.6",
+  "upstream_tag": "2.10.6",
+  "upstream_commit": "c24866405bd2068c25a60e1014e5ef8c3f6445bb",
+  "upstream_url": "https://github.com/music-assistant/server/tree/c24866405bd2068c25a60e1014e5ef8c3f6445bb/music_assistant",
+  "patch_file": "ma-optimizations.patch",
+  "patch_sha256": "1a8dcbb350645377e538675aed3021cd074da4e0a54cdca1ba6be6ff70a98a28",
+  "queue_environment": {
+    "name": "R1_MA_QUEUE_ID",
+    "default": "upbac50e55",
+    "nonempty": true,
+    "restart_required": true
+  },
+  "previous_patch_file": "ma-queue-environment.patch",
+  "previous_patch_sha256": "cbd4018cfdaf65a617f0f3d16767874d38e782a0b5572277d7f2cca356293df2"
 }

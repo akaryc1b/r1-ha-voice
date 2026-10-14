@@ -29,6 +29,8 @@ DEFAULTS = {
     "ma_url": "http://127.0.0.1:8095",
     "ma_queue_id": "upbac50e55",
     "ma_token": "",
+    "default_random_query": "国语流行",
+    "default_random_providers": ["apple_music"],
     "r1_control_url": "http://192.168.1.3:8080",
     "allowed_clients": ["192.168.1.3", "192.168.1.88", "192.168.1.100", "127.0.0.1"],
     "bind_host": "192.168.1.88",
@@ -102,11 +104,15 @@ def validate(values):
         if not isinstance(value, str) or len(value) > 4096 or any(ord(c) < 32 for c in value):
             raise ValueError(field + " 格式无效")
         result[field] = value.strip()
-    for field in ["tts_voice", "ma_queue_id", "bind_host"]:
+    for field in ["tts_voice", "ma_queue_id", "bind_host", "default_random_query"]:
         value = result[field]
         if not isinstance(value, str) or not value.strip() or len(value) > 256 or any(ord(c) < 32 for c in value):
             raise ValueError(field + " 格式无效")
         result[field] = value.strip()
+    providers = result["default_random_providers"]
+    if (not isinstance(providers, list) or len(providers) > 32 or
+            any(not isinstance(v, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}", v) for v in providers)):
+        raise ValueError("default_random_providers 必须是音乐来源 ID 列表；空列表表示不限来源")
     clients = result["allowed_clients"]
     if (not isinstance(clients, list) or not clients or len(clients) > 32
             or any(not isinstance(v, str) or not v or len(v) > 128 for v in clients)):

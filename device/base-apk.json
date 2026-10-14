@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "package": "com.phicomm.speaker.device",
+  "inputs": [
+    {
+      "sha256": "7f9d8a701f5577572148c4509b8d4d063f1296755f415da84e65288c1047523b",
+      "prefix_bytes": 8308372,
+      "description": "已验证包含完整初始挂钩的R1语音备份；保持原APK v1签名条目",
+      "signature_entries_sha256": {
+        "META-INF/MANIFEST.MF": "3eccb1b8766e8843e044c7560a4ce95818df67feb1cd6615d0c25f85b78381eb",
+        "META-INF/CERT.SF": "64829261d3bc206435d25db334c4654d2dc278c785165ae483fbf193cf672d04",
+        "META-INF/CERT.RSA": "695b2d6c5502b905fea246f23ad68f4371ccbd9329a22a2af850993a8454dce0"
+      }
+    }
+  ],
+  "historical_provenance": {
+    "sha256": "6cd76aea5b050fafe2e31cde93f533eb9476f8b07d0b5be7d47703af55a982ce",
+    "prefix_bytes": 8128580,
+    "build_supported": false,
+    "reason": "缺少当前依赖的初始挂钩，不接受构建输入"
+  }
+}

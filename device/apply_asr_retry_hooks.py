@@ -25,4 +25,4 @@ def apply(root):
         path.write_text(text,encoding="utf-8")
 
 if __name__=="__main__":
-    apply(Path(__file__).resolve().parent)
+    raise SystemExit("Use python device/hook_pipeline.py; partial hook application is disabled")

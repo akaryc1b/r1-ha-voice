@@ -118,3 +118,15 @@ R1的 `listen_music_mute` 默认true，8080可关闭。仅真实voice会话以AP
 ### 云端播报音色选择
 
 8080 → 语音识别与播报 → 回答播报选择“云端 TTS”后，“播报音色”使用下拉框。CosyVoice2 提供八种带中文名称的预置音色；列表来源于 [硅基流动官方语音合成文档](https://docs.siliconflow.cn/docs/userguide/capabilities/text-to-speech)，实际支持以所用接口为准。选择“自定义音色 ID”可填写克隆音色或其他模型的音色。读取配置、切换模型不会自动覆盖已保存的音色 ID；选好后点击“保存语音设置”，下一次播报生效。
+
+## 随机听歌默认值
+
+网关的 default_random_query 默认为“国语流行”，default_random_providers 默认为 [apple_music]。8080“音乐播放与音源”可修改并保存，来源字段用英文逗号分隔；留空表示不限音乐来源。仅用于直连 MA 的泛泛随机请求，具体歌名/风格仍由 HA 搜索规则处理，不等同于个人收藏推荐。
+
+## 部署参数与共享规则
+
+HA 的 queue_id、provider、r1_url、ma_url 使用 ha/r1_settings.yaml 统一输入，再由 render_config.py 生成部署文件。MA 优化从进程环境 R1_MA_QUEUE_ID 读取目标队列，须与该设置及网关队列一致；环境变更需重启MA，不由网页隐式改容器环境。
+
+分类、请求前后缀、同音修正和中文音量数字规则只维护 gateway/intent-rules.json，由生成器编入Java，Python读取同一份JSON。改规则需重启网关并重建客户端；日常改ASR/TTS模型仍只需网页保存。中文数字只在完整音量请求中转成0到100的数字，歌名和普通问答不做数字替换；HA也拒绝无法识别或越界的值，不再静默转为0。
+
+新客户端访问网关/asr时显式使用audio_format=pcm_s16le，16kHz单声道PCM16小端；网关仍接受旧客户端默认Float32。离线直连Sherpa继续使用Float32。不要在PCM16客户端连接旧网关前先单独升级客户端。

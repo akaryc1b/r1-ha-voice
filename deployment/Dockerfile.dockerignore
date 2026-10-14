@@ -1,0 +1,25 @@
+# 使用白名单构建上下文，私人配置、日志、APK、模型和密钥均不发送给构建器。
+**
+!deployment/
+!deployment/assets.py
+!deployment/configuration.py
+!deployment/gateway_entry.py
+!deployment/entrypoint.py
+!deployment/healthcheck.py
+!deployment/requirements.txt
+!deployment/Dockerfile
+!deployment/Dockerfile.dockerignore
+!asr/
+!asr/sources.json
+!asr/music-hotwords.txt
+!gateway/
+!gateway/voice_gateway.py
+!gateway/gateway_config.py
+!gateway/event_log.py
+!gateway/gateway.example.json
+!gateway/music-commands.json
+!gateway/audio_transport.py
+!gateway/tts_cache.py
+!gateway/intent_rules.py
+!gateway/intent-rules.json
+!gateway/command-pause-16k.wav

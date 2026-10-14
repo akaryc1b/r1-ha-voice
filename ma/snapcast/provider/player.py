@@ -11,7 +11,7 @@ from music_assistant_models.enums import ConfigEntryType, IdentifierType, Playba
 from music_assistant_models.player import DeviceInfo, PlayerMedia
 from propcache import under_cached_property as cached_property
 from aiohttp import ClientError
-from .r1_hardware_volume import CONF_R1_HARDWARE_VOLUME_URL, R1HardwareVolume
+from .r1_hardware_volume import CONF_R1_HARDWARE_VOLUME_URL, R1HardwareVolume, refresh_server_status
 
 from music_assistant.constants import ATTR_ANNOUNCEMENT_IN_PROGRESS, CONF_ENTRY_HTTP_PROFILE_HIDDEN
 from music_assistant.helpers.util import is_valid_mac_address
@@ -218,11 +218,10 @@ class SnapCastPlayer(Player):
 
     async def poll(self) -> None:
         """Poll the snapserver so abruptly powered-off clients are detected."""
-        await self.snap_provider.refresh_server_status()
+        await refresh_server_status(self.snap_provider)
         if control := self._r1_volume_control():
             try:
-                await self._r1_unity_gain()
-                await control.request()
+                await control.poll(self.playback_state == PlaybackState.PLAYING, before_read=self._r1_unity_gain)
             except (ClientError, TimeoutError, ValueError):
                 self.logger.warning("R1 hardware volume read failed; retaining last volume")
         self.poke_player_update()
@@ -231,6 +230,7 @@ class SnapCastPlayer(Player):
         """Send VOLUME_SET command to given player."""
         if control := self._r1_volume_control():
             await control.request("set", volume_level)
+            self._r1_publish_volume(control)
             await self._r1_unity_gain()
             self.poke_player_update()
             return
@@ -255,6 +255,7 @@ class SnapCastPlayer(Player):
         # not guaranteed that the client respects it
         if control := self._r1_volume_control():
             await control.request("mute" if muted else "unmute")
+            self._r1_publish_volume(control)
             await self._r1_unity_gain()
             self.poke_player_update()
             return
@@ -455,6 +456,12 @@ class SnapCastPlayer(Player):
         if result:
             self.snap_client._client["config"]["volume"] = result
 
+    def _r1_publish_volume(self, control: R1HardwareVolume) -> None:
+        """显式操作直接发布设备返回的量化值，无需等待下一轮回读。"""
+        self._attr_volume_level = control.percent
+        self._attr_volume_muted = control.muted
+        self.update_state()
+
     def _handle_player_update(self, snap_client: SnapclientProto) -> None:
         """Forward snap_client updates."""
         self.poke_player_update()
@@ -511,8 +518,7 @@ class SnapCastPlayer(Player):
         control = self._r1_volume_control()
         if control is not None and control.percent is None:
             try:
-                await self._r1_unity_gain()
-                await control.request()
+                await control.poll(self.playback_state == PlaybackState.PLAYING, before_read=self._r1_unity_gain)
             except (ClientError, TimeoutError, ValueError):
                 self.logger.warning("R1 initial hardware volume read failed")
         curr_state: TrackedPlayerState = {

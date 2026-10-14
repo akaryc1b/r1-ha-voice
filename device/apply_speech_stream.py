@@ -6,6 +6,9 @@ def apply_stream_selection(root):
     path = Path(root) / "smali/com/unisound/sdk/BlockingAudioTrack.smali"
     source = path.read_text(encoding="utf-8")
     assert '"TTS.BlockingAudioTrack"' in source, "Unexpected TTS implementation"
+    if "LocalAsr;->speechStream()I" in source:
+        assert source.count("LocalAsr;->speechStream()I") == 1, "Duplicate TTS selection"
+        return
     marker = "    iput p1, p0, Lcom/unisound/sdk/BlockingAudioTrack;->g:I"
     fixed = "    const/16 p1, 0x9\n\n" + marker
     patched = ("    invoke-static {}, Lr1/local/asr/LocalAsr;->speechStream()I\n"

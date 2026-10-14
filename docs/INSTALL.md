@@ -1,6 +1,6 @@
 # N1 环境与启动配置
 
-已有环境不必重装。下面说明复现这套方案时要准备的组件，不要求把镜像、模型、运行库上传到 GitHub。
+已有环境不必重装。下面说明沿用 N1 原服务部署的方法；新机器可另选 [独立语音容器](../deployment/README.md)，两套语音服务不能同时占用16066/16068端口。镜像、模型、运行库按教程准备，不上传到源码仓库。
 
 ## 1. 宿主和容器
 
@@ -85,12 +85,16 @@ chmod +x /etc/init.d/r1-local-asr
 
 ## 3. 网关文件与服务
 
-将以下五个仓库文件放到 MA 数据目录下的 r1-cloud-voice/：
+将以下网关文件放到 MA 数据目录下的 r1-cloud-voice/（维护时统一复制这些源文件，保留已有私密配置）：
 
 ~~~text
 gateway/voice_gateway.py
 gateway/gateway_config.py
 gateway/event_log.py
+gateway/audio_transport.py
+gateway/tts_cache.py
+gateway/intent_rules.py
+gateway/intent-rules.json
 gateway/music-commands.json
 gateway/command-pause-16k.wav
 ~~~
@@ -148,14 +152,16 @@ R1 需要已安装兼容的自定义语音应用并能连接 ADB。本仓库仅�
 
 HA 接入：
 
-1. 将 ha/packages 的两个 YAML 复制到 HA /config 根目录。
-2. 合并 ha/custom_sentences/zh-cn；复制 ha/www/r1-player-card.js 到 /config/www。
-3. 将面板 YAML 放为 /config/r1_music_dashboard.yaml。
-4. 参考 ha/configuration.snippet.yaml 合并配置，不覆盖整个 configuration.yaml。
-5. 用授权示例创建 /config/r1_music_authorization.yaml，写入带 Bearer 前缀的 MA 令牌。
-6. 替换 IP、队列 upbac50e55、Apple Music 实例 apple_music--tP6RUHDy、面板温湿度实体。
-7. 检查 HA 配置后重载/必要时重启。
-8. 在 HA 创建长期访问令牌，填入 R1 原有 /4 页面；它不是 MA 令牌。
+1. 将 ha/r1_settings.example.yaml 复制为 ha/r1_settings.yaml，填写唯一的 queue_id、provider、r1_url、ma_url。默认 provider 为稳定域 apple_music；多个 Apple 账户时明确填写目标实例 ID。
+2. 从仓库根目录运行：python ha/render_config.py --settings ha/r1_settings.yaml --output-dir ha/rendered。设置与生成目录均不入 Git；仓库 packages/dashboards 是 token 模板，不能原样复制到 HA。
+3. 审阅 ha/rendered 中两个 package，将其复制到 HA /config 根目录；面板复制为 /config/r1_music_dashboard.yaml。合并 ha/custom_sentences/zh-cn。
+4. 卡片可按 [HACS 教程](HACS.md) 安装；手动方式将仓库根 r1-ha-voice.js 复制到 /config/www/r1-ha-voice.js。手动资源是 /local/r1-ha-voice.js，HACS 资源是 /hacsfiles/r1-ha-voice/r1-ha-voice.js，择一登记。
+5. 参考渲染后的 configuration.snippet.yaml 合并配置，不覆盖整个 configuration.yaml；HACS 用户按上一步调整资源路径。替换仪表盘的温湿度实体。
+6. 用授权示例创建 /config/r1_music_authorization.yaml，写入带 Bearer 前缀的 MA 令牌，保留已有授权文件。
+7. 8080 网关队列、HA settings.queue_id、MA 优化的 R1_MA_QUEUE_ID 必须一致。渲染目录提供 r1-ma.env.example；改变 MA 环境变量需要重启 MA，首次安装前先完成设置。
+8. 检查 HA 配置后重载/必要时重启。在 HA 创建长期访问令牌，填入 R1 /4；它不是 MA 令牌。
+
+详见 [HA 配置与渲染](../ha/README.md)。
 
 温湿度语音按 HA 区域寻找传感器；把传感器放入正确区域。电脑控制在 ha/optional，默认不启用、不包含私人 SSH 密钥。
 

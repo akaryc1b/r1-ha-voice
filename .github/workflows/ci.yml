@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: ${{ matrix.group }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: gateway
+            python: '3.12'
+          - group: java
+            python: '3.12'
+          - group: frontend
+            python: '3.12'
+          - group: ma
+            python: '3.14'
+          - group: ha
+            python: '3.14'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        if: matrix.group == 'java'
+        with:
+          distribution: temurin
+          java-version: '11'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: matrix.group == 'frontend'
+        with:
+          node-version: '22'
+      - name: Gateway dependencies
+        if: matrix.group == 'gateway'
+        run: python -m pip install -r deployment/requirements.txt
+      - name: MA test dependencies
+        if: matrix.group == 'ma'
+        run: python -m pip install music-assistant-models==1.1.205 aiohttp numpy
+      - name: HA test dependencies
+        if: matrix.group == 'ha'
+        run: python -m pip install homeassistant==2026.10.1
+      - name: Browser dependencies
+        if: matrix.group == 'frontend'
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Run isolated checks
+        run: python tools/run_checks.py ${{ matrix.group }}
+      - name: Save reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: reports-${{ matrix.group }}
+          path: reports/
+          if-no-files-found: warn
+          retention-days: 14
+
+  container:
+    name: container-${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - name: Validate Compose
+        run: docker compose -f deployment/compose.yaml config --quiet
+      - name: Build fixed-runtime image
+        run: docker build --platform linux/${{ matrix.arch }} -f deployment/Dockerfile -t r1-voice:ci .
+      - name: Download and verify models in temporary volume
+        run: |
+          docker run --rm --platform linux/${{ matrix.arch }} -v r1-ci-models:/models r1-voice:ci bootstrap
+          docker run --rm --platform linux/${{ matrix.arch }} -v r1-ci-models:/models r1-voice:ci verify
+      - name: Verify startup, health and graceful stop
+        shell: bash
+        run: |
+          docker run -d --name r1-voice-ci --platform linux/${{ matrix.arch }} --network host \
+            -v r1-ci-models:/models -e R1_BIND_HOST=127.0.0.1 \
+            -e R1_ALLOWED_CLIENTS='["127.0.0.1"]' r1-voice:ci
+          for attempt in $(seq 1 60); do
+            if docker exec r1-voice-ci python /opt/r1/deployment/healthcheck.py; then break; fi
+            sleep 2
+          done
+          docker exec r1-voice-ci python /opt/r1/deployment/healthcheck.py
+          docker stop -t 20 r1-voice-ci
+          test "$(docker inspect -f '{{.State.ExitCode}}' r1-voice-ci)" = 0
+      - name: Collect isolated container log
+        if: always()
+        run: |
+          mkdir -p reports
+          docker logs r1-voice-ci > reports/container.log 2>&1 || true
+      - name: Save container report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: reports-container-${{ matrix.arch }}
+          path: reports/
+          retention-days: 14

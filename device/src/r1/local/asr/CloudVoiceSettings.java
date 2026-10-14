@@ -10,15 +10,20 @@ import org.json.JSONObject;
 public final class CloudVoiceSettings {
     private static final File FILE = new File("/sdcard/r1-local-asr.json");
 
-    public static synchronized JSONObject read() throws Exception {
-        if (!FILE.isFile() || FILE.length() > 16384) return new JSONObject();
-        FileInputStream input = new FileInputStream(FILE);
-        try {
-            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-            byte[] chunk = new byte[1024]; int count;
-            while ((count = input.read(chunk)) != -1) buffer.write(chunk,0,count);
-            return new JSONObject(new String(buffer.toByteArray(),"UTF-8"));
-        } finally { input.close(); }
+    private static final VoiceSettingsCache CACHE=new VoiceSettingsCache(FILE);
+
+    public static synchronized JSONObject read() throws Exception { return CACHE.read(); }
+    public static String getString(String key,String fallback) throws Exception {return CACHE.getString(key,fallback);}
+    public static boolean getBoolean(String key,boolean fallback) throws Exception {return CACHE.getBoolean(key,fallback);}
+    public static int getInt(String key,int fallback) throws Exception {return CACHE.getInt(key,fallback);}
+    public static long getLong(String key,long fallback) throws Exception {return CACHE.getLong(key,fallback);}
+
+    public static String gatewayUrl() throws Exception {
+        return checkedUrl(getString("gateway_url","http://192.168.1.88:16068"),false);
+    }
+
+    static synchronized void consumeCaptureNext() throws Exception {
+        JSONObject settings=read();settings.put("capture_next",false);write(settings);
     }
 
     public static String gatewayUrl(JSONObject settings) throws Exception {
@@ -44,12 +49,16 @@ public final class CloudVoiceSettings {
     }
 
     private static synchronized void write(JSONObject settings) throws Exception {
-        AtomicFile atomic = new AtomicFile(FILE);
-        FileOutputStream output = atomic.startWrite();
-        try {
-            output.write(settings.toString().getBytes("UTF-8"));
-            atomic.finishWrite(output);
-        } catch (Exception error) { atomic.failWrite(output); throw error; }
+        CACHE.write(settings,new VoiceSettingsCache.Writer(){
+            public void write(String snapshot) throws Exception {
+                AtomicFile atomic=new AtomicFile(FILE);
+                FileOutputStream output=atomic.startWrite();
+                try {
+                    output.write(snapshot.getBytes("UTF-8"));
+                    atomic.finishWrite(output);
+                }catch(Exception error){atomic.failWrite(output);throw error;}
+            }
+        });
     }
 
     static synchronized void saveLogState(boolean enabled,String level,long generation) throws Exception {
@@ -196,9 +205,7 @@ public final class CloudVoiceSettings {
                     String mode=values.get("route");
                     if (!("ha".equals(mode)||"direct".equals(mode))) throw new IllegalArgumentException("Invalid music route");
                     settings.put("music_route",mode);
-                    AtomicFile atomic=new AtomicFile(FILE);FileOutputStream output=atomic.startWrite();
-                    try {output.write(settings.toString().getBytes("UTF-8"));atomic.finishWrite(output);}
-                    catch (Exception error) {atomic.failWrite(output);throw error;}
+                    write(settings);
                 }
                 result=new JSONObject();result.put("route",settings.optString("music_route","ha"));
             } else if ("/voice_volume".equals(path)) {

@@ -95,7 +95,7 @@ public final class VoiceDiagnostics {
     }
 
     private static JSONObject send(JSONObject body) throws Exception {
-        String base=CloudVoiceSettings.gatewayUrl(CloudVoiceSettings.read());
+        String base=CloudVoiceSettings.gatewayUrl();
         HttpURLConnection connection=(HttpURLConnection)new URL(base+"/logs/events").openConnection();
         connection.setConnectTimeout(700);connection.setReadTimeout(1200);
         connection.setRequestMethod("POST");connection.setDoOutput(true);

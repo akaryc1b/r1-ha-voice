@@ -29,7 +29,7 @@ python -m playwright install chromium
 python device/tests/test_voice_logs_browser.py
 ```
 
-也可以用 `--browser` 指定已有 Chromium/Edge 路径，用 `--playwright-path` 指定独立依赖目录，`--report` 和 `--screenshot` 指定输出文件。测试只访问模拟端点，覆盖 17 项浏览器行为，并在临时目录验证 Java 页面常量生成；不会连接音响、清空实际日志或构建/安装 APK。测试结果见 `verification/voice-logs-browser.json`。真实设备端到端验收由安装后另外记录。
+也可以用 `--browser` 指定已有 Chromium/Edge 路径，用 `--playwright-path` 指定独立依赖目录，`--report` 和 `--screenshot` 指定输出文件。测试只访问模拟端点，覆盖 17 项浏览器行为，并在临时目录验证 Java 页面常量生成；不会连接音响、清空实际日志或构建/安装 APK。测试结果由 CI 上传到 Actions Artifacts；本地 `--report` 请写入 ignored `reports/`。真实设备端到端验收由安装后另外记录。
 
 ## 设备验收
 

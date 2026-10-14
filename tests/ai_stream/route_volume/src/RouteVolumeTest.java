@@ -5,9 +5,9 @@ import r1.local.asr.SpeechRouteVolume;
 
 public class RouteVolumeTest {
     static void require(boolean ok,String message){if(!ok)throw new AssertionError(message);}
-    static Context context=new Context();
-    static AudioManager audio=context.audio;
-    static void fresh(){context=new Context();audio=context.audio;LocalAsr.stream=2;SpeechRouteVolume.initialize(context);}
+    static RouteAudioManager audio=new RouteAudioManager();
+    static Context context=new Context(audio);
+    static void fresh(){audio=new RouteAudioManager();context=new Context(audio);LocalAsr.stream=2;SpeechRouteVolume.initialize(context);}
     static void play(Object track){SpeechRouteVolume.beforePlay(track);audio.speaker=true;SpeechRouteVolume.afterPlay(track);}
     static void stop(Object track){audio.speaker=false;SpeechRouteVolume.afterStop(track);}
     public static void main(String[] args)throws Exception {

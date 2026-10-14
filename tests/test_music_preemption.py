@@ -52,7 +52,9 @@ def isolated():
     funcs=[node for node in tree.body if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and node.name in names]
     assert len(funcs)==len(names)
     module=ast.Module(body=funcs,type_ignores=[])
-    env={'asyncio':asyncio,'time':time,'re':re,'LOG':logging.getLogger('isolated-music'),
+    sys.path.insert(0,str(ROOT/'gateway'))
+    import intent_rules
+    env={'INTENTS':intent_rules,'asyncio':asyncio,'time':time,'re':re,'LOG':logging.getLogger('isolated-music'),
          'EventLog':FakeEventLog,'ROOT':ROOT,'log_event':lambda *args,**kwargs:None,
          'SETTINGS':NS(snapshot=lambda:{'ma_queue_id':'test_queue','r1_control_url':'http://invalid.test'}),
          'MUSIC_COMMANDS':{'播放':'resume','继续播放':'resume','随机播放点音乐':'random',

@@ -1,0 +1,202 @@
+--- a/controllers/player_queues/stream_feeder.py
++++ b/controllers/player_queues/stream_feeder.py
+@@ -10,6 +10,7 @@
+ from __future__ import annotations
+ 
+ import asyncio
++import os
+ from typing import TYPE_CHECKING
+ 
+ from music_assistant_models.enums import (
+@@ -28,6 +29,11 @@
+ from music_assistant.controllers.player_queues.base import _PlayerQueuesBase
+ from music_assistant.controllers.streams.constants import STREAM_SLOT_WAIT_TIMEOUT
+ from music_assistant.models.music_provider import MusicProvider
++
++R1_MA_QUEUE_ID = os.environ.get("R1_MA_QUEUE_ID", "upbac50e55").strip()
++if not R1_MA_QUEUE_ID:
++    raise ValueError("R1_MA_QUEUE_ID must not be empty")
++
+ 
+ if TYPE_CHECKING:
+     from music_assistant_models.queue_item import QueueItem
+@@ -317,7 +323,7 @@
+                     # enqueue the next item on the player
+                     self._enqueue_next_item(queue_id, next_item)
+                     # Warm only this speaker's immediate successor; retain MA's buffer limits.
+-                    if queue_id == "upbac50e55":
++                    if queue_id == R1_MA_QUEUE_ID:
+                         self.prepare_next_audio_buffer(queue_id, item_id_in_buffer)
+                         if next_item.queue_item_id == item_id_in_buffer:
+                             await self._preload_r1_manual_successor(queue_id, item_id_in_buffer)
+--- a/controllers/player_queues/queue_loader.py
++++ b/controllers/player_queues/queue_loader.py
+@@ -11,6 +11,7 @@
+ from __future__ import annotations
+ 
+ import asyncio
++import os
+ import time
+ 
+ import random
+@@ -76,6 +77,11 @@
+ from music_assistant.helpers.throttle_retry import BYPASS_THROTTLER
+ from music_assistant.models.music_provider import MusicProvider
+ 
++R1_MA_QUEUE_ID = os.environ.get("R1_MA_QUEUE_ID", "upbac50e55").strip()
++if not R1_MA_QUEUE_ID:
++    raise ValueError("R1_MA_QUEUE_ID must not be empty")
++
++
+ if TYPE_CHECKING:
+     from music_assistant_models.media_items.metadata import MediaItemImage
+     from music_assistant_models.queue_item import QueueItem
+@@ -313,7 +319,7 @@
+         queue_id = queue_item.queue_id
+         queue = self._queue_data[queue_id].queue
+         deferred_artwork: Track | None = None
+-        if is_start and queue_id == "upbac50e55":
++        if is_start and queue_id == R1_MA_QUEUE_ID:
+             self.mass.cancel_task(f"r1_artwork_{queue_id}")
+         r1_started=time.monotonic()
+         r1_abort=0.0
+@@ -434,7 +440,7 @@
+                 eager_start=False,
+             )
+ 
+-        if queue_id == "upbac50e55" and is_start:
++        if queue_id == R1_MA_QUEUE_ID and is_start:
+             self.logger.info("R1_LOAD_TIMING metadata=%.3f abort=%.3f details=%.3f buffer=%.3f total=%.3f",
+                 r1_metadata-r1_started,r1_abort-r1_metadata,r1_details-r1_abort,
+                 time.monotonic()-r1_details,time.monotonic()-r1_started)
+@@ -445,7 +451,7 @@
+         item = queue_item.media_item
+         if (
+             not is_start
+-            or queue_item.queue_id != "upbac50e55"
++            or queue_item.queue_id != R1_MA_QUEUE_ID
+             or not queue_item.available
+             or not isinstance(item, Track)
+             or not item.item_id
+--- a/controllers/streams/controller.py
++++ b/controllers/streams/controller.py
+@@ -123,6 +123,11 @@
+ from music_assistant.models.plugin import PluginProvider
+ from music_assistant.providers.universal_group.constants import UGP_PREFIX
+ from music_assistant.providers.universal_group.player import UniversalGroupPlayer
++
++R1_MA_QUEUE_ID = os.environ.get("R1_MA_QUEUE_ID", "upbac50e55").strip()
++if not R1_MA_QUEUE_ID:
++    raise ValueError("R1_MA_QUEUE_ID must not be empty")
++
+ 
+ if TYPE_CHECKING:
+     from music_assistant_models.config_entries import CoreConfig
+@@ -1331,7 +1336,7 @@
+         if overlay_active(queue):
+             flow_stream = self.audio.get_overlay_mixed_stream(queue, flow_stream, flow_pcm_format)
+         r1_fast_flac = (
+-            queue_id == "upbac50e55"
++            queue_id == R1_MA_QUEUE_ID
+             and output_format.content_type == ContentType.FLAC
+             and queue.current_item is not None
+             and queue.current_item.streamdetails is not None
+--- a/controllers/streams/audio.py
++++ b/controllers/streams/audio.py
+@@ -161,6 +161,11 @@
+     remove_file,
+ )
+ from music_assistant.models.music_provider import MusicProvider, ProviderStreamLimitError
++
++R1_MA_QUEUE_ID = os.environ.get("R1_MA_QUEUE_ID", "upbac50e55").strip()
++if not R1_MA_QUEUE_ID:
++    raise ValueError("R1_MA_QUEUE_ID must not be empty")
++
+ 
+ if TYPE_CHECKING:
+     from music_assistant_models.media_items import ProviderMapping
+@@ -2420,7 +2425,7 @@
+                         queue.display_name,
+                     )
+                     continue
+-                if queue.queue_id == "upbac50e55":
++                if queue.queue_id == R1_MA_QUEUE_ID:
+                     if _superseded():
+                         return
+                     central_item = self.mass.player_queues.get_item(
+@@ -2594,7 +2599,7 @@
+                         queue_track.streamdetails,
+                         float(queue_track.extra_attributes.get("playback_speed") or 1.0),
+                     )
+-                    if queue.queue_id == "upbac50e55"
++                    if queue.queue_id == R1_MA_QUEUE_ID
+                     else PlayLogEntry(queue_track.queue_item_id)
+                 )
+                 flow_log.append(play_log_entry)
+@@ -3911,7 +3916,7 @@
+         # Sequential reads avoid scanning every remote fragment before first PCM.
+         # Real source seeks retain normal HTTP range support.
+         if (
+-            streamdetails.queue_id == "upbac50e55"
++            streamdetails.queue_id == R1_MA_QUEUE_ID
+             and streamdetails.provider.startswith("apple_music--")
+             and streamdetails.stream_type == StreamType.ENCRYPTED_HTTP
+             and seek_position == 0
+@@ -3996,7 +4001,7 @@
+                         mass.loop.time() - stream_start,
+                         ffmpeg_proc.input_format.codec_type,
+                     )
+-                if streamdetails.queue_id == "upbac50e55" and bytes_sent < chunk_size * 2:
++                if streamdetails.queue_id == R1_MA_QUEUE_ID and bytes_sent < chunk_size * 2:
+                     logger.info(
+                         "R1_SOURCE_TIMING chunk=%d elapsed=%.3f realtime=%s",
+                         bytes_sent // chunk_size + 1,
+--- a/controllers/player_queues/controller.py
++++ b/controllers/player_queues/controller.py
+@@ -14,6 +14,7 @@
+ from __future__ import annotations
+ 
+ import asyncio
++import os
+ from copy import copy
+ import random
+ import time
+@@ -93,6 +94,11 @@
+ from music_assistant.models.music_provider import ProviderStreamLimitError
+ from music_assistant.models.player import Player, PlayerMedia
+ 
++R1_MA_QUEUE_ID = os.environ.get("R1_MA_QUEUE_ID", "upbac50e55").strip()
++if not R1_MA_QUEUE_ID:
++    raise ValueError("R1_MA_QUEUE_ID must not be empty")
++
++
+ if TYPE_CHECKING:
+     from collections.abc import Iterator
+ 
+@@ -798,7 +804,7 @@
+ 
+         # debounce rapid next button presses using call_later
+         self.mass.call_later(
+-            0.15 if queue_id == "upbac50e55" else 1,
++            0.15 if queue_id == R1_MA_QUEUE_ID else 1,
+             self.play_index,
+             queue_id,
+             next_index,
+@@ -837,7 +843,7 @@
+ 
+         # debounce rapid previous button presses using call_later
+         self.mass.call_later(
+-            0.15 if queue_id == "upbac50e55" else 1,
++            0.15 if queue_id == R1_MA_QUEUE_ID else 1,
+             self.play_index,
+             queue_id,
+             prev_index,
+@@ -1377,7 +1383,7 @@
+             original_media = queue_item.media_item
+             original_session = self._queue_data[queue_id].session_id
+             if (
+-                queue_id == "upbac50e55"
++                queue_id == R1_MA_QUEUE_ID
+                 and queue.flow_mode
+                 and queue.current_item
+                 and queue_item.queue_item_id == queue.current_item.queue_item_id

@@ -7,6 +7,7 @@ views:
     cards:
       - type: custom:r1-player-card
         entity: media_player.r1_apple_music
+        r1_url: __R1_URL__
         temperature: sensor.temperature_humidity_sensor_fa73_temperature
         humidity: sensor.temperature_humidity_sensor_fa73_humidity
   - title: 音乐库与队列
@@ -15,5 +16,5 @@ views:
     type: panel
     cards:
       - type: iframe
-        url: http://192.168.1.88:8095/
+        url: __MA_URL__/
         aspect_ratio: 110%

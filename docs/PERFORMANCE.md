@@ -36,7 +36,7 @@
 
 识别应先增加本地解码/端点/云请求的时间点，再评估完整短指令的端点策略。直接全局缩短静音可能重现“没说完就结束收音”，本轮没有这样修改。
 
-原始改后加载和稳定性记录见 [prefetch.json](verification/prefetch.json)。源缓冲优化及 PCM 对照范围见 [TESTING.md](TESTING.md)。
+原始改后加载和稳定性记录见 此前 Git 提交中的 prefetch.json。源缓冲优化及 PCM 对照范围见 [TESTING.md](TESTING.md)。
 
 ## 本轮进一步定位
 
@@ -92,4 +92,15 @@ MUSIC原3、切设备后8，被同步回3；音乐静音0切路后3也被同步�
 同轮真实点歌进入HA_DIRECT，继续播放进入MA_DIRECT；普通问题仍由AI处理。
 “国语流行被解释”和“暂停慢”在更新版上的对应日志尚待现场定句复测。
 
-安全摘要：[current-acceptance.json](verification/current-acceptance.json)。
+安全摘要：此前 Git 提交中的 current-acceptance.json。
+
+
+## 本轮代码重构的计时边界
+
+PCM16 上行将16kHz单声道的采样载荷从每秒64,000字节减为32,000字节，不等于整个 Wi-Fi 流量恰好减半。采样值原样进入云端 WAV，Sherpa 所需 Float32 在 N1 转换；拼接和封装仍有内存复制。兼容旧客户端，直连离线服务仍用 Float32。
+
+空闲时单次切歌可复用500ms内、generation/revision/队列一致的预检；有在途修改或结果过期则重查。外部 HA 或 MA 客户端仍可能独立改队列，这不是跨服务事务快照。TTS改为最多32项、合计4MiB的LRU，命中更新最近使用顺序，配置变更后旧合成流不回填缓存。
+
+Snapcast的旧provider原本已有约2.5秒状态节流，不能把内部1Hz调度等同每秒一次Server.GetStatus。新共享节流限制为最多每5秒一次，硬件音量播放2秒、空闲10秒；编码、采样率和音频缓冲没有改变。
+
+以上是实现与隔离测试结果，本轮尚未部署到音箱，不能直接推断真人响应节省0.5秒或实际切歌耗时。现场数据需另行采集。

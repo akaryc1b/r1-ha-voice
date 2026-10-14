@@ -44,7 +44,27 @@
                      self.logger.warning("Failed to get song stream metadata: %s", exc)
 --- a/controllers/player_queues/stream_feeder.py
 +++ b/controllers/player_queues/stream_feeder.py
-@@ -258,6 +258,29 @@
+@@ -10,6 +10,7 @@
+ from __future__ import annotations
+ 
+ import asyncio
++import os
+ from typing import TYPE_CHECKING
+ 
+ from music_assistant_models.enums import (
+@@ -28,6 +29,11 @@
+ from music_assistant.controllers.player_queues.base import _PlayerQueuesBase
+ from music_assistant.controllers.streams.constants import STREAM_SLOT_WAIT_TIMEOUT
+ from music_assistant.models.music_provider import MusicProvider
++
++R1_MA_QUEUE_ID = os.environ.get("R1_MA_QUEUE_ID", "upbac50e55").strip()
++if not R1_MA_QUEUE_ID:
++    raise ValueError("R1_MA_QUEUE_ID must not be empty")
++
+ 
+ if TYPE_CHECKING:
+     from music_assistant_models.queue_item import QueueItem
+@@ -258,6 +264,29 @@
          task_id = f"enqueue_next_item_{queue_id}"
          self.mass.call_later(1, _enqueue_next_item_on_player, next_item, task_id=task_id)
  
@@ -74,12 +94,12 @@
      def _preload_next_item(self, queue_id: str, item_id_in_buffer: str) -> None:
          """
          Preload the streamdetails for the next item in the queue/buffer.
-@@ -293,6 +316,11 @@
+@@ -293,6 +322,11 @@
                      )
                      # enqueue the next item on the player
                      self._enqueue_next_item(queue_id, next_item)
 +                    # Warm only this speaker's immediate successor; retain MA's buffer limits.
-+                    if queue_id == "upbac50e55":
++                    if queue_id == R1_MA_QUEUE_ID:
 +                        self.prepare_next_audio_buffer(queue_id, item_id_in_buffer)
 +                        if next_item.queue_item_id == item_id_in_buffer:
 +                            await self._preload_r1_manual_successor(queue_id, item_id_in_buffer)
@@ -88,11 +108,12 @@
                  return
 --- a/controllers/player_queues/queue_loader.py
 +++ b/controllers/player_queues/queue_loader.py
-@@ -10,11 +10,16 @@
+@@ -10,11 +10,17 @@
  
  from __future__ import annotations
  
 +import asyncio
++import os
 +import time
 +
  import random
@@ -105,12 +126,24 @@
      MediaType,
      PlaybackState,
      QueueOption,
-@@ -307,6 +312,12 @@
+@@ -71,6 +77,11 @@
+ from music_assistant.helpers.throttle_retry import BYPASS_THROTTLER
+ from music_assistant.models.music_provider import MusicProvider
+ 
++R1_MA_QUEUE_ID = os.environ.get("R1_MA_QUEUE_ID", "upbac50e55").strip()
++if not R1_MA_QUEUE_ID:
++    raise ValueError("R1_MA_QUEUE_ID must not be empty")
++
++
+ if TYPE_CHECKING:
+     from music_assistant_models.media_items.metadata import MediaItemImage
+     from music_assistant_models.queue_item import QueueItem
+@@ -307,6 +318,12 @@
          """
          queue_id = queue_item.queue_id
          queue = self._queue_data[queue_id].queue
 +        deferred_artwork: Track | None = None
-+        if is_start and queue_id == "upbac50e55":
++        if is_start and queue_id == R1_MA_QUEUE_ID:
 +            self.mass.cancel_task(f"r1_artwork_{queue_id}")
 +        r1_started=time.monotonic()
 +        r1_abort=0.0
@@ -118,7 +151,7 @@
  
          # we use a contextvar to bypass the throttler for this asyncio task/context
          # this makes sure that playback has priority over other requests that may be
-@@ -336,16 +347,20 @@
+@@ -336,16 +353,20 @@
              ):
                  # Youtube Music has poor thumbs by default, so we always fetch the full item
                  # this also catches the case where they have an unavailable item in a listing
@@ -148,7 +181,7 @@
  
              # ensure we got the full (original) album set
              if album and (
-@@ -371,9 +386,11 @@
+@@ -371,9 +392,11 @@
          # decided once the album above is resolved: a queue item can hold a slim mapping of its
          # album, which carries none of the provider ids the enqueued album is matched on
          playing_album_tracks = self._plays_as_album_track(queue_item)
@@ -160,7 +193,7 @@
  
          # Fetch streamdetails (reuses existing if buffer is still valid for the seek).
          queue_item.streamdetails = await self.mass.streams.audio.get_stream_details(
-@@ -382,6 +399,7 @@
+@@ -382,6 +405,7 @@
              fade_in=fade_in,
              prefer_album_loudness=playing_album_tracks,
          )
@@ -168,7 +201,7 @@
          # update queue_item.duration from streamdetails if we got a better value
          self._apply_probed_duration(queue_item)
  
-@@ -399,6 +417,117 @@
+@@ -399,6 +423,117 @@
              # the first chunk is in, so the source has been probed and a duration the
              # provider did not report is known before playback starts
              self._apply_probed_duration(queue_item)
@@ -189,7 +222,7 @@
 +                eager_start=False,
 +            )
 +
-+        if queue_id == "upbac50e55" and is_start:
++        if queue_id == R1_MA_QUEUE_ID and is_start:
 +            self.logger.info("R1_LOAD_TIMING metadata=%.3f abort=%.3f details=%.3f buffer=%.3f total=%.3f",
 +                r1_metadata-r1_started,r1_abort-r1_metadata,r1_details-r1_abort,
 +                time.monotonic()-r1_details,time.monotonic()-r1_started)
@@ -200,7 +233,7 @@
 +        item = queue_item.media_item
 +        if (
 +            not is_start
-+            or queue_item.queue_id != "upbac50e55"
++            or queue_item.queue_id != R1_MA_QUEUE_ID
 +            or not queue_item.available
 +            or not isinstance(item, Track)
 +            or not item.item_id
@@ -288,12 +321,24 @@
          """
 --- a/controllers/streams/controller.py
 +++ b/controllers/streams/controller.py
-@@ -1330,6 +1330,18 @@
+@@ -123,6 +123,11 @@
+ from music_assistant.models.plugin import PluginProvider
+ from music_assistant.providers.universal_group.constants import UGP_PREFIX
+ from music_assistant.providers.universal_group.player import UniversalGroupPlayer
++
++R1_MA_QUEUE_ID = os.environ.get("R1_MA_QUEUE_ID", "upbac50e55").strip()
++if not R1_MA_QUEUE_ID:
++    raise ValueError("R1_MA_QUEUE_ID must not be empty")
++
+ 
+ if TYPE_CHECKING:
+     from music_assistant_models.config_entries import CoreConfig
+@@ -1330,6 +1335,18 @@
          )
          if overlay_active(queue):
              flow_stream = self.audio.get_overlay_mixed_stream(queue, flow_stream, flow_pcm_format)
 +        r1_fast_flac = (
-+            queue_id == "upbac50e55"
++            queue_id == R1_MA_QUEUE_ID
 +            and output_format.content_type == ContentType.FLAC
 +            and queue.current_item is not None
 +            and queue.current_item.streamdetails is not None
@@ -307,7 +352,7 @@
          audio_bytes = get_ffmpeg_stream(
              audio_input=flow_stream,
              input_format=flow_pcm_format,
-@@ -1340,8 +1352,8 @@
+@@ -1340,8 +1357,8 @@
              # this is reported to be an issue especially with Chromecast players.
              # see for example: https://github.com/music-assistant/support/issues/3717
              # one continuous stream, so the player gains nothing from running far ahead
@@ -320,7 +365,19 @@
          # same registry as the single-item route: a forced-flow player (overlay)
 --- a/controllers/streams/audio.py
 +++ b/controllers/streams/audio.py
-@@ -346,6 +346,26 @@
+@@ -162,6 +162,11 @@
+ )
+ from music_assistant.models.music_provider import MusicProvider, ProviderStreamLimitError
+ 
++R1_MA_QUEUE_ID = os.environ.get("R1_MA_QUEUE_ID", "upbac50e55").strip()
++if not R1_MA_QUEUE_ID:
++    raise ValueError("R1_MA_QUEUE_ID must not be empty")
++
++
+ if TYPE_CHECKING:
+     from music_assistant_models.media_items import ProviderMapping
+     from music_assistant_models.player_queue import PlayerQueue
+@@ -346,6 +351,26 @@
          overshoot.extend(next_chunk[remaining:])
          taken += len(part)
          yield part
@@ -347,11 +404,11 @@
  
  
  class _IncomingFadePrefetcher:
-@@ -2400,6 +2420,16 @@
+@@ -2400,6 +2425,16 @@
                          queue.display_name,
                      )
                      continue
-+                if queue.queue_id == "upbac50e55":
++                if queue.queue_id == R1_MA_QUEUE_ID:
 +                    if _superseded():
 +                        return
 +                    central_item = self.mass.player_queues.get_item(
@@ -364,7 +421,7 @@
                  # re-read the effective crossfade settings so a change applies at the
                  # next track transition instead of the next stream session; a realtime
                  # source still gets its fade decided from what its boundary can
-@@ -2558,7 +2588,15 @@
+@@ -2558,7 +2593,15 @@
                      overlay_enabled=overlay_active(queue),
                  )
                  # append to play log so the queue controller can work out which track is playing
@@ -375,13 +432,13 @@
 +                        queue_track.streamdetails,
 +                        float(queue_track.extra_attributes.get("playback_speed") or 1.0),
 +                    )
-+                    if queue.queue_id == "upbac50e55"
++                    if queue.queue_id == R1_MA_QUEUE_ID
 +                    else PlayLogEntry(queue_track.queue_item_id)
 +                )
                  flow_log.append(play_log_entry)
  
                  bytes_written = 0
-@@ -2820,6 +2858,8 @@
+@@ -2820,6 +2863,8 @@
                      if last_fadeout_part:
                          # crossfade into this item never happened — undo the eager seek_position
                          queue_track.streamdetails.seek_position = raw_seek_position
@@ -390,7 +447,7 @@
                      continue
  
                  #### HANDLE END OF TRACK
-@@ -2834,6 +2874,8 @@
+@@ -2834,6 +2879,8 @@
                      play_log_entry.seconds_streamed = 0
                      if last_fadeout_part:
                          queue_track.streamdetails.seek_position = raw_seek_position
@@ -399,7 +456,7 @@
                      continue
                  if last_fadeout_part:
                      # edge case: we did not get enough data to make the crossfade
-@@ -2877,6 +2919,8 @@
+@@ -2877,6 +2924,8 @@
                  seconds_streamed = bytes_written / pcm_sample_size
                  queue_track.streamdetails.seconds_streamed = seconds_streamed
                  play_log_entry.seconds_streamed = seconds_streamed
@@ -408,7 +465,7 @@
                  # an externally aborted source ends in a clean EOF mid-track, so the
                  # streamed length must not be written back as the item's duration
                  source_buffer = queue_track.streamdetails.buffer
-@@ -3862,6 +3906,18 @@
+@@ -3862,6 +3911,18 @@
              and "-readrate" not in extra_input_args
          ):
              extra_input_args += ["-readrate", "1", "-readrate_initial_burst", "0.5"]
@@ -417,7 +474,7 @@
 +        # Sequential reads avoid scanning every remote fragment before first PCM.
 +        # Real source seeks retain normal HTTP range support.
 +        if (
-+            streamdetails.queue_id == "upbac50e55"
++            streamdetails.queue_id == R1_MA_QUEUE_ID
 +            and streamdetails.provider.startswith("apple_music--")
 +            and streamdetails.stream_type == StreamType.ENCRYPTED_HTTP
 +            and seek_position == 0
@@ -427,11 +484,11 @@
  
          # handle seek support
          if seek_position and streamdetails.duration and streamdetails.allow_seek:
-@@ -3940,6 +3996,13 @@
+@@ -3940,6 +4001,13 @@
                          mass.loop.time() - stream_start,
                          ffmpeg_proc.input_format.codec_type,
                      )
-+                if streamdetails.queue_id == "upbac50e55" and bytes_sent < chunk_size * 2:
++                if streamdetails.queue_id == R1_MA_QUEUE_ID and bytes_sent < chunk_size * 2:
 +                    logger.info(
 +                        "R1_SOURCE_TIMING chunk=%d elapsed=%.3f realtime=%s",
 +                        bytes_sent // chunk_size + 1,
@@ -443,33 +500,46 @@
  
 --- a/controllers/player_queues/controller.py
 +++ b/controllers/player_queues/controller.py
-@@ -14,6 +14,7 @@
+@@ -14,6 +14,8 @@
  from __future__ import annotations
  
  import asyncio
++import os
 +from copy import copy
  import random
  import time
  from typing import TYPE_CHECKING, Any, Final, cast
-@@ -797,7 +798,7 @@
+@@ -92,6 +94,11 @@
+ from music_assistant.models.music_provider import ProviderStreamLimitError
+ from music_assistant.models.player import Player, PlayerMedia
+ 
++R1_MA_QUEUE_ID = os.environ.get("R1_MA_QUEUE_ID", "upbac50e55").strip()
++if not R1_MA_QUEUE_ID:
++    raise ValueError("R1_MA_QUEUE_ID must not be empty")
++
++
+ if TYPE_CHECKING:
+     from collections.abc import Iterator
+ 
+@@ -797,7 +804,7 @@
  
          # debounce rapid next button presses using call_later
          self.mass.call_later(
 -            1,
-+            0.15 if queue_id == "upbac50e55" else 1,
++            0.15 if queue_id == R1_MA_QUEUE_ID else 1,
              self.play_index,
              queue_id,
              next_index,
-@@ -836,7 +837,7 @@
+@@ -836,7 +843,7 @@
  
          # debounce rapid previous button presses using call_later
          self.mass.call_later(
 -            1,
-+            0.15 if queue_id == "upbac50e55" else 1,
++            0.15 if queue_id == R1_MA_QUEUE_ID else 1,
              self.play_index,
              queue_id,
              prev_index,
-@@ -1372,12 +1373,42 @@
+@@ -1372,12 +1379,42 @@
              if idx >= 10:
                  # we only allow 10 retries to prevent infinite loops
                  raise QueueEmpty("No more (playable) tracks left in the queue.")
@@ -477,7 +547,7 @@
 +            original_media = queue_item.media_item
 +            original_session = self._queue_data[queue_id].session_id
 +            if (
-+                queue_id == "upbac50e55"
++                queue_id == R1_MA_QUEUE_ID
 +                and queue.flow_mode
 +                and queue.current_item
 +                and queue_item.queue_item_id == queue.current_item.queue_item_id
@@ -512,7 +582,7 @@
                  # we're all set, this is our next item
                  next_item = queue_item
                  break
-@@ -1390,6 +1421,12 @@
+@@ -1390,6 +1427,12 @@
                      "Skipping unplayable item %s (%s): %s", queue_item.name, queue_item.uri, err
                  )
                  queue_item.available = False

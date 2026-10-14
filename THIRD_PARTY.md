@@ -5,7 +5,7 @@
 | 项目 | 用途与来源 |
 | --- | --- |
 | Music Assistant Server 2.10.6 | [官方源码](https://github.com/music-assistant/server/tree/2.10.6)，Apache-2.0；原许可证保留在 `ma/LICENSE` |
-| MA 源码优化 | `ma/ma-final` 保留修改前/后文件，差异见 `ma/ma-optimizations.patch`；修改涵盖元数据缓存、预热、有限起始读取、计时、R1 顺序取流与按钮等待 |
+| MA 源码优化 | 固定官方 commit 与 SHA 见 `ma/ma-optimizations-manifest.json`，只保存主补丁和已知旧优化版迁移补丁，完整上游源码按需下载到 Git 外缓存；修改涵盖元数据缓存、预热、有限起始读取、计时、R1 顺序取流与按钮等待 |
 | MA AirPlay / cliairplay | [官方 MA AirPlay 说明](https://www.music-assistant.io/player-support/airplay/)，本次 cliairplay 0.5.5；仓库只记录来源/校验信息和依赖，不携带运行归档 |
 | Sherpa-ONNX | [官方项目](https://github.com/k2-fsa/sherpa-onnx)，[1.13.8 发布](https://github.com/k2-fsa/sherpa-onnx/releases/tag/v1.13.8)，Apache-2.0 |
 | 中文 Zipformer 模型 | [模型来源](https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23)，下载清单与 SHA256 见 `asr/sources.json` |

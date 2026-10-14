@@ -8,7 +8,7 @@ public final class MusicListenMuteTest {
  static void pass(String name){passed++;System.out.println("PASS "+name);}
  public static void main(String[] args){
   MusicListenMute.acquire(true).close();pass("unavailable context is a no-op");
-  AudioManager audio=new AudioManager();MusicListenMute.initialize(new Context(audio));
+  MuteAudioManager audio=new MuteAudioManager();MusicListenMute.initialize(new Context(audio));
   MusicListenMute.Lease first=MusicListenMute.acquire(true);
   check(audio.muted()&&audio.ownMuteCount==1);first.close();
   check(!audio.muted()&&audio.musicIndex==2&&audio.speechIndex==8);pass("balanced lease leaves both volume indexes unchanged");
@@ -43,7 +43,7 @@ public final class MusicListenMuteTest {
   pass("failed release retains lease for later finally retry");
 
   audio.reset();first=MusicListenMute.acquire(true);
-  AudioManager replacement=new AudioManager();MusicListenMute.initialize(new Context(replacement));first.close();
+  MuteAudioManager replacement=new MuteAudioManager();MusicListenMute.initialize(new Context(replacement));first.close();
   check(audio.releases==1&&replacement.releases==0);pass("lease always releases through original Binder owner");
   System.out.println(passed+" listen mute tests passed");
  }

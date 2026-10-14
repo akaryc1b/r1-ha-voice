@@ -47,7 +47,7 @@ python maintain_provider.py --provider-dir "$SNAPCAST_PROVIDER_DIR"
 python maintain_provider.py --provider-dir "$SNAPCAST_PROVIDER_DIR" --backup-dir "$SOURCE_BACKUP_DIR" --apply
 ~~~
 
-默认只读；写入前校验上游/适配源码 SHA，拒绝未知内容，先备份再原子替换。完成后重启现有 MA 容器加载源代码。--restore 恢复两个官方源，保留不再引用的新增 helper，不删除其它文件。
+默认只读；写入前校验上游、当前适配及清单显式登记的旧适配 SHA，拒绝未知内容，先备份再原子替换。完成后重启现有 MA 容器加载源代码。--restore 恢复两个官方源，保留不再引用的新增 helper，不删除其它文件。
 
 仓库源码以 LF 保存，清单哈希针对 Git 中的实际字节。检查同时接受仅 CRLF 换行不同的已部署副本；不忽略其他内容差异。应用时使用清单对应的原始字节，避免 Windows 换行转换使校验失效。
 
@@ -61,7 +61,9 @@ R1 Snapcast 子播放器的高级设置新增 r1_hardware_volume_url，填写自
 http://<R1_IP>:8080/voice_volume
 ~~~
 
-留空时保留标准 Snapcast 软件音量。启用后 MA 显示实际硬件百分比（15 级量化），1 秒回读外部音量变化；失败保留上次值。先暂停播放，再设置该项，避免初次软件增益归一时意外变响。
+留空时保留标准 Snapcast 软件音量。启用后 MA 显示实际硬件百分比（15 级量化），播放时每 2 秒、空闲时每 10 秒回读外部变化；显式设置/静音/取消静音不等待轮询，直接发布设备返回的实际值。失败保留上次值，并从尝试开始计时，避免初始读取或 unity 失败后反复快速重试。先暂停播放，再设置该项，避免初次软件增益归一时意外变响。
+
+MA 内部仍使用 1 秒调度 tick，但不会每 tick 请求 R1 或 Snapserver。共享 helper 按 provider 合并所有播放器的 Server.GetStatus，最多每 5 秒尝试一次，慢请求未结束时不会重叠；硬件音量回读采用独立时间戳。上游 provider 原本已有 2.5 秒最低间隔，所以旧版也并非每秒实际请求 Snapserver。音频规格、500ms 缓冲、unity 和硬件步进映射保持不变。
 
 等 Snapcast 与已有卧室播放器合并后，使用 MA 正常设置页面选择 Snapcast 为首选输出。保留 AirPlay 作为回退；不直接编辑数据库。需确认原 HA 和语音网关仍指向同一逻辑队列。
 
@@ -93,6 +95,8 @@ adb -s "$R1_ADB" shell am broadcast -n de.badaix.snapcast/.BroadcastReceiver -a 
 ~~~sh
 python -m unittest discover -s tests
 ~~~
+
+轮询调整新增隔离验收见 Actions Artifacts 的 gateway 报告：23 项 localhost/模拟时钟测试通过，覆盖跨播放器 5 秒合并、慢请求不重叠、失败/取消退避、2/10 秒硬件回读、显式量化值立即发布和旧 SHA 升级保护。此次未部署到 N1，也未改变真实音乐或音量；Python 3.10 测试提取实际 player 方法运行，完整上游 player 文件仍要求 MA 的 Python 3.14。
 
 还应逐项验证首播、立即/预取后的切歌、暂停/继续、音量/静音、至少 10 分钟长播、音乐中唤醒/收音/播报和恢复。分别记录源加载、传输、实际新音频输出时间。Snapdroid 的源码没有完整语音 duck 接口，不能先假设唤醒共存已经处理完。
 

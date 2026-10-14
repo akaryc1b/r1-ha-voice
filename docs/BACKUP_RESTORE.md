@@ -38,7 +38,7 @@
 2. 对相同包名/签名的已知可用 APK 执行覆盖安装；不要卸载再安装。
 3. 只在确实需要时恢复 `/sdcard/r1-local-asr.json`，避免覆盖更新后的地址或唤醒词。
 
-本次升级前的源文件与设备配置留在本地开发备份 `configurable-voice/before/`，不公开上传私密文件。APK 的正式校验值以 `device/build-report.json` 为准。
+本次升级前的源文件与设备配置留在本地开发备份 `configurable-voice/before/`，不公开上传私密文件。源 APK 允许清单见 `device/base-apk.json`；新 APK 校验值以本地生成的 `device/build/build-report.json` 为准。
 
 ## 回退网关
 

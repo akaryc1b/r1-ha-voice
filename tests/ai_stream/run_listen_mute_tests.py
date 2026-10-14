@@ -1,35 +1,19 @@
-"""Run isolated music listening mute lifecycle tests; no hardware or network access."""
+"""运行隔离 JVM suite；不访问设备或生产服务。"""
 from pathlib import Path
 import argparse
-import os
-import shutil
-import subprocess
 import tempfile
-
+from java_test_support import compile_suite,json_dependency,run_main,ROOT
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--java-home", type=Path, help="JDK 11 or later")
-    args = parser.parse_args()
-    here = Path(__file__).resolve().parent
-    root = here.parents[1]
-    source = root / "device/src/r1/local/asr/MusicListenMute.java"
-    if not source.is_file():
-        raise SystemExit("Missing device/src/r1/local/asr/MusicListenMute.java")
-    home = args.java_home or (Path(os.environ["JAVA_HOME"]) if os.environ.get("JAVA_HOME") else None)
-    suffix = ".exe" if os.name == "nt" else ""
-    java = str(home / "bin" / ("java" + suffix)) if home else shutil.which("java")
-    javac = str(home / "bin" / ("javac" + suffix)) if home else shutil.which("javac")
-    if not java or not javac:
-        raise SystemExit("Install JDK 11+ or supply --java-home")
-    with tempfile.TemporaryDirectory(prefix="r1-listen-mute-tests-") as temporary:
-        classes = Path(temporary) / "classes"
-        classes.mkdir()
-        subprocess.run([javac, "-encoding", "UTF-8", "-d", str(classes)]
-                       + [str(path) for path in (here / "listen_mute/src").rglob("*.java")]
-                       + [str(source)], check=True, timeout=30)
-        subprocess.run([java, "-cp", str(classes), "MusicListenMuteTest"], check=True, timeout=10)
+    parser=argparse.ArgumentParser()
+    parser.add_argument("--java-home",type=Path,help="JDK 11 or later")
+    args=parser.parse_args()
+    with tempfile.TemporaryDirectory(prefix="r1-jvm-tests-") as temporary:
+        work=Path(temporary)
+        dependencies=[json_dependency(work)] if False else []
+        extra=[]
 
+        compiled=compile_suite(work,'listen_mute/src',['r1/local/asr/MusicListenMute.java'],args.java_home,dependencies,extra)
+        for name in ['MusicListenMuteTest']:run_main(compiled,name,35)
 
-if __name__ == "__main__":
-    main()
+if __name__=="__main__":main()

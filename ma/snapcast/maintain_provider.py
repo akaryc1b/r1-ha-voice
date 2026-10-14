@@ -31,7 +31,7 @@ def main() -> None:
         target=args.provider_dir/item['name']
         current_bytes=target.read_bytes() if target.exists() else None
         current=hashlib.sha256(current_bytes).hexdigest() if current_bytes is not None else None
-        known={item['upstream_sha256'],item['patched_sha256']}
+        known={item['upstream_sha256'],item['patched_sha256'],*item.get('accepted_prior_sha256',[])}
         normalized=hashlib.sha256(current_bytes.replace(b'\r\n',b'\n')).hexdigest() if current_bytes is not None else None
         if current not in known and normalized not in known:
             raise SystemExit('Unknown source; refuse overwrite: '+item['name'])

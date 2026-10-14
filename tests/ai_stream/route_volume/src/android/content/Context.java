@@ -1,1 +1,0 @@
-package android.content; public class Context {public static final String AUDIO_SERVICE="audio"; public android.media.AudioManager audio=new android.media.AudioManager();public Context getApplicationContext(){return this;}public Object getSystemService(String name){return audio;}}

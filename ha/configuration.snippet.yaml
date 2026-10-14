@@ -6,7 +6,7 @@ homeassistant:
 
 lovelace:
   resources:
-    - url: /local/r1-player-card.js?v=20261013
+    - url: /local/r1-ha-voice.js
       type: module
   dashboards:
     r1-music:

@@ -1,6 +1,6 @@
 package r1.local.asr;
 import org.json.JSONObject;
-public final class CloudVoiceSettings {
+public final class CloudVoiceSettings {public static String gatewayUrl() throws Exception{return gatewayUrl(read());}
  static JSONObject config=new JSONObject();
  public static String base;
  public static JSONObject read(){return config;}

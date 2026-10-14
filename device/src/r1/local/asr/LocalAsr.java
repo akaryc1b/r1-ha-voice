@@ -7,9 +7,6 @@ import android.content.IntentFilter;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.media.AudioRecord;
-import android.media.AudioFormat;
-import android.media.MediaRecorder;
 import android.media.AudioManager;
 import android.util.Log;
 import com.unisound.client.IAudioSource;
@@ -29,7 +26,6 @@ import nluparser.scheme.NLU;
 /** 保留原生唤醒，只将唤醒后的音频交给局域网识别服务。 */
 public final class LocalAsr {
     private static final String TAG = "R1LocalASR";
-    private static final File CONFIG = new File("/sdcard/r1-local-asr.json");
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final OkHttpClient HTTP = new OkHttpClient.Builder()
             .connectTimeout(2, TimeUnit.SECONDS).readTimeout(0, TimeUnit.SECONDS).build();
@@ -119,7 +115,7 @@ public final class LocalAsr {
     }
 
     public static int speechStream() {
-        try { return CloudVoiceSettings.read().optInt("speech_stream",9) == 2 ? 2 : 9; }
+        try { return CloudVoiceSettings.getInt("speech_stream",9) == 2 ? 2 : 9; }
         catch (Exception ignored) { return 9; }
     }
 
@@ -165,7 +161,7 @@ public final class LocalAsr {
             if (owner == null) return;
             if (active != null) { RETRY.cancel(ticket); return; }
             try {
-                if (!CloudVoiceSettings.read().optBoolean("asr_retry_once",true)) { RETRY.cancel(ticket); return; }
+                if (!CloudVoiceSettings.getBoolean("asr_retry_once",true)) { RETRY.cancel(ticket); return; }
                 if (!RETRY.take(ticket,VoiceSession.currentTurn(),SystemClock.elapsedRealtime())) return;
                 retryOwner = null;
                 Log.i(TAG,"RETRY_LISTEN turn=" + VoiceSession.currentTurn());
@@ -263,17 +259,7 @@ public final class LocalAsr {
         return false;
     }
 
-    private static JSONObject config() throws Exception {
-        if (!CONFIG.isFile() || CONFIG.length() > 4096) return new JSONObject();
-        FileInputStream stream = new FileInputStream(CONFIG);
-        try {
-            ByteArrayOutputStream data = new ByteArrayOutputStream();
-            byte[] buffer = new byte[1024];
-            int n;
-            while ((n = stream.read(buffer)) != -1) data.write(buffer, 0, n);
-            return new JSONObject(new String(data.toByteArray(), "UTF-8"));
-        } finally { stream.close(); }
-    }
+    private static JSONObject config() throws Exception { return CloudVoiceSettings.read(); }
 
     private static void start(NativeANTEngine value, String mode) { start(value,mode,false); }
 
@@ -283,12 +269,9 @@ public final class LocalAsr {
         try {
             JSONObject settings = config();
             if (!continuation && ("voice".equals(mode) || "sample".equals(mode))) VoiceSession.newTurn();
-            session = new Session(value, source, mode, settings,continuation);
+            session = new Session(value, mode, settings,continuation);
             if (session.captureAudio) {
-                settings.put("capture_next", false);
-                FileOutputStream file = new FileOutputStream(CONFIG);
-                try { file.write(settings.toString().getBytes("UTF-8")); }
-                finally { file.close(); }
+                CloudVoiceSettings.consumeCaptureNext();
             }
             active = session;
             if ("sample".equals(mode) || "verify".equals(mode)) {
@@ -327,21 +310,14 @@ public final class LocalAsr {
 
     /** 只修正完整的音乐控制短句，避免改写歌名或普通聊天。 */
     public static String normalize(String text) {
-        String command = text.replaceAll("[\\s，。！？、,.!?]", "");
-        if (command.matches("(切换|切到|换到|换)?(一)?下(一)?[首手守](歌|歌曲)?"))
-            return "下一首";
-        if (command.matches("(切换|切到|换到|换)?上一[首手守](歌|歌曲)?"))
-            return "上一首";
-        if (command.matches("(播放|放)(播放|放)音乐(吧)?"))
-            return "播放音乐";
-        return text.trim().replaceAll("^[，。！？、,.!?]+|[，。！？、,.!?]+$", "").trim();
+        return SharedIntentRules.normalize(text);
     }
 
     private static final class Session implements Runnable {
         final NativeANTEngine owner;
-        final IAudioSource audio;
         final String mode;
         final String url;
+        final boolean pcm16;
         final int channels;
         final boolean captureAudio;
         final MusicListenMute.Lease musicMute;
@@ -351,7 +327,6 @@ public final class LocalAsr {
         volatile boolean retryable;
         final CountDownLatch opened = new CountDownLatch(1);
         final CountDownLatch finished = new CountDownLatch(1);
-        final CountDownLatch microphoneHandoff = new CountDownLatch(1);
         final ArrayBlockingQueue<byte[]> frames = new ArrayBlockingQueue<byte[]>(64);
         volatile WebSocket socket;
         volatile boolean stop;
@@ -359,10 +334,6 @@ public final class LocalAsr {
         volatile String failure = "";
         volatile String recognizedBackend = "";
         volatile boolean finalResult;
-        boolean audioOpen;
-        volatile boolean heldOpen;
-        volatile boolean closing;
-        volatile AudioRecord recorder;
         long started;
         long bytes;
         long squares;
@@ -370,12 +341,15 @@ public final class LocalAsr {
         int peak;
         int watchdogMilliseconds;
 
-        Session(NativeANTEngine owner, IAudioSource audio, String mode, JSONObject settings, boolean continuation) throws Exception {
-            this.owner = owner; this.audio = audio; this.mode = mode;
+        Session(NativeANTEngine owner, String mode, JSONObject settings, boolean continuation) throws Exception {
+            this.owner = owner; this.mode = mode;
             turn = VoiceSession.currentTurn();
             retryEnabled = settings.optBoolean("asr_retry_once",true);
             retryContinuation = continuation;
-            url = settings.optString("server", "ws://192.168.1.88:16066");
+            String configured = settings.optString("server", "ws://192.168.1.88:16066");
+            CloudVoiceSettings.asrServer(configured);
+            url = AsrAudio.transportUrl(configured);
+            pcm16 = AsrAudio.isGateway(url);
             channels = settings.optInt("channels", 1) == 2 ? 2 : 1;
             captureAudio = "voice".equals(mode) && settings.optBoolean("capture_next", false);
             CloudVoiceSettings.asrServer(url);
@@ -502,7 +476,7 @@ public final class LocalAsr {
                     captured += count;
                 }
                 bytes += count;
-                byte[] converted = floats(pcm, count, channels);
+                byte[] converted = encode(pcm, count, channels);
                 if (!"probe".equals(mode)) {
                     if (!socket.send(new ByteString(converted)))
                         throw new IOException("ASR sender stalled");
@@ -541,7 +515,7 @@ public final class LocalAsr {
                 byte[] pcm = new byte[3200]; int count;
                 while (!stop && (count = input.read(pcm)) > 0) {
                     bytes += count;
-                    if (!socket.send(new ByteString(floats(pcm, count, 1))))
+                    if (!socket.send(new ByteString(encode(pcm, count, 1))))
                         throw new IOException("Sample send failed");
                     Thread.sleep(count * 1000L / 32000L);
                 }
@@ -550,27 +524,18 @@ public final class LocalAsr {
             } finally { input.close(); }
         }
 
-        private byte[] floats(byte[] pcm, int count, int channels) {
-            int frames = count / (channels * 2);
-            ByteBuffer result = ByteBuffer.allocate(frames * 4).order(ByteOrder.LITTLE_ENDIAN);
-            for (int i = 0; i < frames; ++i) {
-                int at = i * channels * 2;
-                short sample = (short)((pcm[at] & 255) | (pcm[at + 1] << 8));
-                int magnitude = Math.abs((int)sample);
-                peak = Math.max(peak, magnitude);
+        private byte[] encode(byte[] pcm, int count, int channels) {
+            byte[] mono = AsrAudio.mono(pcm,count,channels);
+            for (int at=0;at<mono.length;at+=2) {
+                short sample = (short)((mono[at] & 255) | (mono[at + 1] << 8));
+                peak = Math.max(peak,Math.abs((int)sample));
                 squares += (long)sample * sample; samples++;
-                result.putFloat(sample / 32768.0f);
             }
-            return result.array();
+            return pcm16 ? mono : AsrAudio.floats(mono);
         }
 
         private synchronized void closeAudio() {
             musicMute.close();
-            if (!audioOpen) return;
-            audioOpen = false;
-            closing = true;
-            try { recorder.stop(); recorder.release(); recorder = null; }
-            catch (Exception error) { Log.w(TAG, "MIC_CLOSE_FAILED", error); }
         }
     }
 }

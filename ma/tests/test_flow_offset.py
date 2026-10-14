@@ -1,22 +1,30 @@
 """Run isolated flow regressions using the supplied source tree; no live controls."""
 import argparse
+import os
+import sys
 from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from maintain_ma_optimizations import optimized_source
 parser=argparse.ArgumentParser()
-parser.add_argument("--source-root",type=Path,default=Path(__file__).resolve().parents[1]/"ma-final")
+parser.add_argument("--source-root",type=Path,help="已应用补丁的 music_assistant 包目录；默认从固定官方缓存重建")
 args=parser.parse_args()
 files={
- "controllers/player_queues/controller.py":(args.source_root/"ma-queue-controller.r1-debounce.py").read_text(encoding="utf-8"),
- "controllers/player_queues/playback_tracker.py":(args.source_root/"ma-playback-tracker.flow-offset.py").read_text(encoding="utf-8"),
- "controllers/streams/audio.py":(args.source_root/"ma-audio.r1-sequential.py").read_text(encoding="utf-8"),
+ path:optimized_source(path,args.source_root) for path in (
+ "controllers/player_queues/controller.py",
+ "controllers/player_queues/playback_tracker.py",
+ "controllers/streams/audio.py")
 }
-code='''import ast,asyncio,copy,json,textwrap
+code='''import ast,asyncio,copy,json,os,textwrap
 from types import SimpleNamespace
 from music_assistant_models.enums import MediaType,PlaybackState
 from music_assistant_models.errors import MediaNotFoundError,AudioError,QueueEmpty
 from music_assistant_models.player_queue import PlayLogEntry
 files=FILES
 for name,content in files.items():compile(content,name,'exec')
-env={'copy':copy.copy,'MediaType':MediaType,'PlaybackState':PlaybackState,'PlayLogEntry':PlayLogEntry}
+env={'copy':copy.copy,'MediaType':MediaType,'PlaybackState':PlaybackState,'PlayLogEntry':PlayLogEntry,'os':os}
+tree=ast.parse(files['controllers/player_queues/controller.py'])
+setting=next(n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='R1_MA_QUEUE_ID' for t in n.targets))
+exec(compile(ast.Module(body=[setting],type_ignores=[]),'queue-environment','exec'),env)
 env.update(MediaNotFoundError=MediaNotFoundError,AudioError=AudioError,QueueEmpty=QueueEmpty,ProviderStreamLimitError=type('ProviderStreamLimitError',(Exception,),{}))
 def extract(source,name):
  tree=ast.parse(source)
@@ -54,7 +62,7 @@ async def main():
  handoff=next(n for n in ast.walk(audio_tree) if isinstance(n,ast.If) and any(isinstance(c,ast.Name) and c.id=='central_item' for c in ast.walk(n)))
  handoff_fn=ast.FunctionDef(name='handoff',args=ast.arguments(posonlyargs=[],args=[],kwonlyargs=[],kw_defaults=[],defaults=[]),body=[handoff],decorator_list=[])
  handoff_module=ast.Module(body=[handoff_fn],type_ignores=[]);ast.fix_missing_locations(handoff_module)
- context={'queue':queue,'queue_track':next_play,'self':SimpleNamespace(mass=SimpleNamespace(player_queues=host)),'_superseded':lambda:True}
+ context={'queue':queue,'queue_track':next_play,'self':SimpleNamespace(mass=SimpleNamespace(player_queues=host)),'_superseded':lambda:True,'R1_MA_QUEUE_ID':env['R1_MA_QUEUE_ID']}
  exec(compile(handoff_module,'actual-buffer-ownership-handoff','exec'),context)
  context['handoff']();assert active.streamdetails is details
  context['_superseded']=lambda:False;context['handoff']()
@@ -123,4 +131,5 @@ async def main():
       'active_buffer_ownership_transferred':True,'stale_session_handoff_blocked':True,'other_player_behavior_preserved':True,
       'fade_correction_preserved':True,'non_flow_behavior_preserved':True,'artwork_enriched_without_quality_replacement':True,'stale_artwork_blocked':True,'failure_availability_preserved':True,'stale_failure_blocked':True,'completed_entries_release_buffer_references':True,'archived_entries_tested':99,'production_mutation':False}
 print(json.dumps(asyncio.run(main())))'''.replace('FILES',repr(files))
+code=code.replace("'upbac50e55'",repr(os.environ.get('R1_MA_QUEUE_ID','upbac50e55').strip()))
 exec(compile(code,'isolated-flow-regression','exec'))

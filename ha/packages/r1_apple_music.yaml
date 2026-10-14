@@ -1,11 +1,11 @@
 # 使用 Home Assistant 原生 REST 命令和脚本控制现有 Music Assistant。
 rest_command:
   r1_volume_api:
-    url: "http://192.168.1.3:8080/voice_volume?target={{ volume_target }}&operation={{ operation }}&percent={{ percent | default(0) | int }}"
+    url: "__R1_URL__/voice_volume?target={{ volume_target }}&operation={{ operation }}&percent={{ percent | default(0) }}"
     method: GET
     timeout: 3
   r1_music_api:
-    url: http://127.0.0.1:8095/api
+    url: __MA_URL__/api
     method: post
     content_type: application/json
     timeout: 45
@@ -15,7 +15,7 @@ rest_command:
       {{ {'command': command, 'args': args | default({})} | to_json }}
 
   r1_music_search_api:
-    url: http://127.0.0.1:8095/api
+    url: __MA_URL__/api
     method: post
     content_type: application/json
     timeout: 8
@@ -29,11 +29,23 @@ script:
     mode: queued
     max: 10
     sequence:
+      - variables:
+          percent_text: "{{ percent | default('') | string | trim }}"
+      - if: >-
+          {{ volume_target not in ['music', 'speech']
+             or operation not in ['set', 'up', 'down', 'mute', 'unmute']
+             or (operation == 'set' and not (percent_text | string | regex_match('^(0|[1-9][0-9]?|100)$'))) }}
+        then:
+          - variables:
+              result:
+                message: 音量参数不合法，请提供0到100之间的整数百分比。我没有调整音量。
+          - stop: 拒绝不合法音量
+            response_variable: result
       - action: rest_command.r1_volume_api
         data:
           volume_target: "{{ volume_target }}"
           operation: "{{ operation }}"
-          percent: "{{ percent | default(0) | int }}"
+          percent: "{{ percent_text | int if operation == 'set' else 0 }}"
         response_variable: volume_result
       - variables:
           result:
@@ -63,7 +75,7 @@ script:
             continue_on_error: true
             data:
               command: music/albums/album_tracks
-              args: "{{ {'item_id': continuation_album | string, 'provider_instance_id_or_domain': 'apple_music--tP6RUHDy'} }}"
+              args: "{{ {'item_id': continuation_album | string, 'provider_instance_id_or_domain': '__PROVIDER__'} }}"
             response_variable: album_result
           - variables:
               remaining: >-
@@ -78,17 +90,25 @@ script:
                 data:
                   command: player_queues/play_media
                   args:
-                    queue_id: upbac50e55
+                    queue_id: __QUEUE_ID__
                     # 保留播放和封面所需资料，避免重复传送歌手长篇介绍。
                     media: >-
                       {% set ns = namespace(tracks=[]) %}
+                      {% set first = args.media if args.media is mapping else {} %}
+                      {% set first_metadata = first.get('metadata') or {} %}
+                      {% set first_album = first.get('album') or {} %}
+                      {% set first_images = first_metadata.get('images') or ([first_album.image] if first_album.image is defined and first_album.image is mapping else []) %}
                       {% for t in remaining %}
                         {% set artists = namespace(items=[]) %}
-                        {% for artist in t.artists %}
-                          {% set artists.items = artists.items + [dict(item_id=artist.item_id, provider=artist.provider, name=artist.name, media_type='artist')] %}
+                        {% for artist in t.get('artists') or [] %}
+                          {% set artists.items = artists.items + [dict(item_id=artist.get('item_id', ''), provider=artist.get('provider', ''), name=artist.get('name', ''), media_type='artist')] %}
                         {% endfor %}
-                        {% set album = dict(item_id=t.album.item_id, provider=t.album.provider, name=t.album.name, media_type='album') if t.album else none %}
-                        {% set ns.tracks = ns.tracks + [dict(media_type='track', item_id=t.item_id, provider=t.provider, name=t.name, uri=t.uri, artists=artists.items, album=album, provider_mappings=t.provider_mappings, duration=t.duration, disc_number=t.disc_number, track_number=t.track_number, metadata=dict(images=t.metadata.images | default([])))] %}
+                        {% set source_album = t.get('album') or {} %}
+                        {% set album = dict(item_id=source_album.get('item_id', ''), provider=source_album.get('provider', ''), name=source_album.get('name', ''), media_type='album') if source_album.get('item_id') and source_album.get('provider') else none %}
+                        {% if album and source_album.image is defined and source_album.image is mapping %}{% set album = dict(album, image=source_album.image) %}{% endif %}
+                        {% set metadata = t.get('metadata') or {} %}
+                        {% set images = metadata.get('images') or ([source_album.image] if source_album.image is defined and source_album.image is mapping else first_images) %}
+                        {% set ns.tracks = ns.tracks + [dict(media_type='track', item_id=t.get('item_id', ''), provider=t.get('provider', ''), name=t.get('name', ''), uri=t.get('uri', ''), artists=artists.items, album=album, provider_mappings=t.get('provider_mappings') or [], duration=t.get('duration'), disc_number=t.get('disc_number', 0), track_number=t.get('track_number', 0), metadata=dict(images=images))] %}
                       {% endfor %}
                       {{ ns.tracks }}
                     option: add
@@ -162,7 +182,7 @@ script:
           media_types: '{{ [''playlist''] if is_style else [''track''] }}'
           limit: '{{ 20 if is_artist else 1 }}'
           providers:
-          - apple_music
+          - __PROVIDER__
       response_variable: search_result
     - variables:
         tracks: '{{ (search_result.content.playlists | default([]) if is_style else search_result.content.tracks |
@@ -177,7 +197,7 @@ script:
             data:
               command: player_queues/repeat
               args:
-                queue_id: upbac50e55
+                queue_id: __QUEUE_ID__
                 repeat_mode: 'off'
             response_variable: random_repeat_result
           - if: "{{ random_repeat_result is not defined or random_repeat_result.status != 200 }}"
@@ -193,12 +213,28 @@ script:
           data:
             variables:
               delay_seconds: 0
-              continuation_album: '{% if not is_style and not is_artist %}{% set urls = tracks[0].provider_mappings
-                | map(attribute=''url'') | select(''string'') | list %} {% set ids = (urls[0] if urls else '''') |
-                regex_findall(''/album/[^/]+/([0-9]+)'') %} {{ ids[0] if ids else '''' }}{% endif %}'
+              continuation_album: >-
+                {% set ns = namespace(id='') %}
+                {% if not is_style and not is_artist %}
+                  {% set track = tracks[0] %}
+                  {% set album = track.get('album') or {} %}
+                  {% set provider = album.get('provider') or '' %}
+                  {% set configured = '__PROVIDER__' %}
+                  {% set album_id = album.get('item_id', '') | string %}
+                  {% if album_id | regex_match('^[0-9]+$') and (provider in ['apple_music', configured] or (configured == 'apple_music' and provider.startswith('apple_music--'))) %}
+                    {% set ns.id = album_id %}
+                  {% endif %}
+                  {% for mapping in track.get('provider_mappings') or [] %}
+                    {% if not ns.id and mapping.get('provider_domain') == 'apple_music' and (configured == 'apple_music' or mapping.get('provider_instance') == configured) %}
+                      {% set ids = (mapping.get('url') or '') | regex_findall('/album/(?:[^/?#]+/)?([0-9]+)(?:[/?#]|$)') %}
+                      {% if ids %}{% set ns.id = ids[0] %}{% endif %}
+                    {% endif %}
+                  {% endfor %}
+                {% endif %}
+                {{ ns.id }}
               command: player_queues/play_media
               args: >-
-                {% set play_args = dict(queue_id='upbac50e55', media=(tracks[0].uri if is_style else tracks if is_artist else tracks[0]), option='replace') %}
+                {% set play_args = dict(queue_id='__QUEUE_ID__', media=(tracks[0].uri if is_style else tracks if is_artist else tracks[0]), option='replace') %}
                 {{ dict(play_args, shuffle=true) if randomize | default(false) | bool else play_args }}
         - variables:
             result:
@@ -250,7 +286,7 @@ script:
       data:
         command: player_queues/get
         args:
-          queue_id: upbac50e55
+          queue_id: __QUEUE_ID__
       response_variable: queue_result
     - variables:
         queue: '{{ queue_result.content if queue_result.status == 200 else {} }}'
@@ -284,13 +320,13 @@ script:
               args: >-
                 {% set current = queue.get('current_index', 0) | int(0) %}
                 {% set index = current + 1 if operation == 'next' else [current - 1, 0] | max if operation == 'previous' else 0 %}
-                {{ {'player_id': 'upbac50e55'} if operation == 'resume' else {'queue_id': 'upbac50e55', 'index': index} }}
+                {{ {'player_id': '__QUEUE_ID__'} if operation == 'resume' else {'queue_id': '__QUEUE_ID__', 'index': index} }}
       default:
       - action: rest_command.r1_music_api
         data:
           command: '{{ ''player_queues/'' ~ operation }}'
           args:
-            queue_id: upbac50e55
+            queue_id: __QUEUE_ID__
     - variables:
         result:
           message: '{{ {''pause'': ''已暂停。'', ''resume'': ''继续播放。'', ''stop'': ''已停止。'', ''next'': ''下一首。'', ''previous'':
@@ -328,7 +364,7 @@ intent_script:
         data:
           volume_target: "{{ volume_target }}"
           operation: "{{ operation }}"
-          percent: "{{ level | default(0) | int }}"
+          percent: "{{ level | default('') }}"
         response_variable: result
       - stop: 返回音量调整结果
         response_variable: result

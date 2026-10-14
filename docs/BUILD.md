@@ -1,71 +1,48 @@
-# R1 客户端构建与覆盖安装
+# R1 客户端构建与安装
 
-公开仓库主要保存环境说明和源码，不上传 APK、完整厂商 SDK、镜像、模型或工具 JAR。云端 ASR 模型的日常更换只需 8080 配置，不需要构建。
+日常更换云端 ASR、TTS 音色和接口只需 8080 页面配置。修改设备端代码后，再按本页构建客户端。
 
-## 需要的开发环境
+## 构建前提
 
-- Python 3.10 或更高。
-- JDK 11（已验证）。
-- Android SDK Platform 29 的 android.jar。
-- Android Build Tools 29.0.3 的 D8。
-- smali / baksmali 2.5.2 及其依赖；版本、Maven 下载地址和 SHA256 在 `device/build-tools.json`。
-- 自己的匹配 R1 备份 APK，SHA256 应与 `device/build-report.json` 的 `apk_sha256` 相同。
+- Python 3.10+、JDK 11、Android SDK Platform 29、Build Tools 29.0.3。
+- smali / baksmali 工具由 `device/download_build_tools.py` 按固定 SHA256 下载。
+- 自己保存的、匹配 `device/base-apk.json` 输入清单的 R1 APK。
 
-## 取得本机 APK 备份
+`base-apk.json` 是受版本控制的构建输入契约，包含允许源 APK 的哈希、DEX 前缀和签名条目身份。当前仅支持已验证具有完整初始挂钩的备份。旧 6cd76… APK 缺少这些挂钩，保留来源信息但不作为可构建输入；任意原厂或未知魔改固件不自动兼容。
 
-已有兼容安装时：
+已有设备可查询并备份安装包：
 
 ```sh
-adb -s 192.168.1.3:5555 shell pm path com.phicomm.speaker.device
+adb -s 你的R1地址:5555 shell sh /system/bin/pm path com.phicomm.speaker.device
+adb -s 你的R1地址:5555 pull 返回的实际base.apk路径 自己的备份目录/base.apk
 ```
-
-按返回的真实路径执行 `adb pull`，保存为 `device/r1-local-asr.apk`。不要照搬其他设备的 `/data/app/...` 路径。APK 被 `.gitignore` 排除，保留在自己的本地备份中。
-
-此构建方式依赖本次已改造 APK 内的原生挂钩；不是从任意 R1 原厂 APK 自动生成全部改造。没有匹配备份时，不能绕过校验强行使用未知固件。
-
-## 下载构建工具
-
-```sh
-python device/download_build_tools.py
-```
-
-下载后核对固定 SHA256，工具存入被忽略的 `device/tools/`。
 
 ## 构建
 
-Windows 示例，按实际路径修改：
-
 ```powershell
-python "device\build_client.py" `
-  --base-apk "device\r1-local-asr.apk" `
-  --java-home "C:\你的JDK11目录" `
-  --android-sdk "C:\你的AndroidSDK目录"
+python "device\download_build_tools.py"
+python "device\build_client.py" --base-apk "自己的匹配备份.apk" --java-home "自己的JDK11目录" --android-sdk "自己的AndroidSDK目录"
 ```
 
-也支持 JAVA_HOME、ANDROID_SDK_ROOT / ANDROID_HOME。脚本会先校验输入 APK，恢复其原生 DEX 挂钩，再编译自有 Java 源码与网页。
+每次构建使用新的临时工作目录，从已校验 APK 重新反编译。自有类重新编译，厂商 SDK 桩只参与编译；旧 smali 或 classes 缓存不会作为输入。
 
-页面源文件是 `device/web/voice-card.html`、`voice-settings.js`、`voice-settings.css`，构建时生成 VoiceConfigPage.java，不需要手工编辑大段 Java 转义字符串。
+入口统一执行 hook pipeline：先校验签名和预期位置，再在临时副本注入，验证幂等，全部成功后写入。失败不会把半套修改留在输入目录。
 
-输出 `device/r1-local-asr.apk` 与更新后的 `build-report.json`。DEX 重排或工具环境可能造成新 APK 哈希与原输入不同，安装以本次新报告为准。干净目录构建已经通过，不代表任意工具版本均经过验证。
+输出在被 Git 忽略的 `device/build/`，包括新 APK 和 `build-report.json`。报告描述本次产物，不作为公开仓库中的固定测试成绩。源输入契约与构建报告用途不同，不能互相替代。
 
-## 覆盖安装
+## 覆盖安装与恢复
 
 ```sh
-python tools/flash_r1.py --serial 192.168.1.3:5555
-python tools/flash_r1.py --serial 192.168.1.3:5555 --apply
+python tools/flash_r1.py --serial 你的R1地址:5555
+python tools/flash_r1.py --serial 你的R1地址:5555 --apply
 ```
 
-ADB 不在 PATH 时加 `--adb "实际路径"`。工具核对本机与设备端 SHA256、现有包名，使用 `pm install -r`，不执行卸载或清除数据。安装后检查 8080 设置回读与实际识别。
+默认只读检查；ADB 不在 PATH 时使用 `--adb`。`--apply` 会先保存当前 APK 备份，再传输、校验、执行覆盖安装。保留 Android 的签名检查，不卸载、不清数据。失败时保留备份，按工具给出的恢复命令处理。
 
-旧 APK、R1 配置与 N1 私密配置都应保留在仓库外。构建脚本不是绕过签名不匹配的方法。
+安装前另外备份 R1 与 N1 配置。安装后检查设置回读、真实收音、暂停、问答和播报；构建或 JVM 测试成功不能代替 Android ART 与实际设备验收。
 
-补充验证边界：从当前已安装 APK 在干净目录提取 DEX 并重新构建已成功。该重建产物的额外 Android ART 检查因 ADB 传输在 90 秒超时，未执行完成；未安装此重建产物。现场已安装版本的 ART 校验、网页与识别测试此前通过。重建后应先完成设备端校验再覆盖安装。
+## 源码入口
 
-本轮第一阶段客户端 f3c2d7a53b246d35e39aa2ac4174e409634f3a078d4fa2d0080497e31bd2fbe9 已完成设备端 SHA256、Android ART 校验和覆盖安装；8080 保存/刷新与两段播报已验证。上述干净重建产物的独立验证边界仍保留，不混为同一产物。
+网页源文件在 `device/web/`。`VoiceConfigPage.java` 由生成器生成。意图规则源在 `gateway/intent-rules.json`，音乐核心表由 HA 句式生成，再通过 `tools/generate_intent_rules.py` 编入 Java；不维护第二套正则。
 
-当前客户端291bdaf85ba595f66724e258fd555e7a207892b326c98a2d1c7efde51195d356已通过SHA256、Android ART及覆盖安装；新增播报切路音量补偿，真实唤醒日志确认普通音量与静音保护均生效。单次播报中调音回切由隔离测试覆盖，尚未做现场定句完整验收。
-
-
-## 2026-10-14 单次续听客户端
-
-当前安装SHA256：105942ceb9d625bd25a9b458fff13cd4e387bd9008e47e4d50de08d410017541。新增AsrRetryOnce状态机、唤醒取消挂钩、真实TTS完成续听及8080开关；正常音乐说法不再归一化成“播放音乐”。12项生命周期/16项归一化测试、Java编译、smali幂等/原方法还原、Android ART、覆盖安装及安装后SHA256通过。现场自动续听尚待验证，291版的旧听测不代表新版已完成所有听测。
+本轮重构未自动安装到用户设备。完整检查入口和报告位置见 [TESTING.md](TESTING.md)。

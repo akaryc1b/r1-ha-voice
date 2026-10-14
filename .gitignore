@@ -42,3 +42,18 @@ tools/image/ma-source/
 *.tar
 *.tar.gz
 *.tar.bz2
+
+# 自动生成的规则与验证输出
+/device/src/r1/local/asr/SharedIntentRules.java
+/reports/
+/docs/verification/*.json
+/device/build-report.json
+/device/build/
+/.cache/
+
+# HA 单一配置及渲染输出
+/ha/r1_settings.yaml
+/ha/rendered/
+/deployment/validation.json
+
+/ma/snapcast/tests/polling-validation.json
