@@ -52,10 +52,15 @@
       "after_sha256": "9f509782e33134e6bf9c9dbf08db76ba5d68823ac15e53edb761247d15f2d2bb",
       "network_upgrade_from_sha256": "e921d33a3f45f9857cef1ce4933d25fa756c2115362a11963bf5c2f57a8d7a63",
       "upgrade_from_sha256": "e921d33a3f45f9857cef1ce4933d25fa756c2115362a11963bf5c2f57a8d7a63"
+    },
+    {
+      "path": "providers/apple_music/media.py",
+      "before_sha256": "46c8471ca3349a2879fd5530fc205e7e10be745c93a8949bb7803c79570a7b21",
+      "after_sha256": "12322af7dcd78df4e61337329e3207904764d11694cdc1bbfe8764eef0fdb72a"
     }
   ],
   "dlna_experimental_change_restored": true,
-  "updated_at": "2026-10-14T10:05:16.946666+00:00",
+  "updated_at": "2026-10-14T14:45:57.512564+00:00",
   "r1_sequential_apple_initial_reads": true,
   "r1_button_debounce_seconds": 0.15,
   "r1_repeat_one_manual_successor_details_prefetch": true,
@@ -68,7 +73,7 @@
   "upstream_commit": "c24866405bd2068c25a60e1014e5ef8c3f6445bb",
   "upstream_url": "https://github.com/music-assistant/server/tree/c24866405bd2068c25a60e1014e5ef8c3f6445bb/music_assistant",
   "patch_file": "ma-optimizations.patch",
-  "patch_sha256": "ca6bda5a9d7faff227dc1f5b2f75254374cdb517bc3f543b23f5bef788e78b90",
+  "patch_sha256": "0b107253b0f8a31ac4133e6e85fd1ce9f3e87d0f9f9f36f685b8207c54e0f902",
   "queue_environment": {
     "name": "R1_MA_QUEUE_ID",
     "default": "upbac50e55",
@@ -84,5 +89,6 @@
   "r1_apple_http_pipe_default": true,
   "r1_prewarm_session_ownership": true,
   "r1_startup_idle_details_prefetch": true,
-  "r1_apple_sequential_seek_max_seconds_default": 120
+  "r1_apple_sequential_seek_max_seconds_default": 120,
+  "apple_playlist_optional_ratings_budget_seconds": 2
 }

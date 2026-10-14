@@ -255,7 +255,7 @@ async def ma_request(app,command,args):
         if response.status!=200:raise RuntimeError('Music Assistant HTTP '+str(response.status))
         return await response.json()
 
-async def perform_music(app,operation,generation=None,precheck=None):
+async def perform_music(app,operation,generation=None,precheck=None,turn=0):
     async def current_request(command,args):
         # Cancellation cannot retract an MA request already sent. Fence every
         # request boundary so a superseded preparation cannot submit another one.
@@ -265,7 +265,17 @@ async def perform_music(app,operation,generation=None,precheck=None):
         check_current()
         if command not in {'player_queues/get','music/search'}:
             app['music_revision']+=1
-        result=await ma_request(app,command,args)
+        started=time.monotonic()
+        try:
+            result=await ma_request(app,command,args)
+        except (aiohttp.ClientError,asyncio.TimeoutError,RuntimeError,ValueError,TypeError) as error:
+            # 仅记录固定的接口名称，不保存请求参数、上游响应或密钥。
+            error.ma_command=command
+            error.ma_unconfirmed=(command not in {'player_queues/get','music/search'} and
+                                  isinstance(error,(aiohttp.ClientError,asyncio.TimeoutError)))
+            raise
+        log_event(app,'DEBUG','MA',turn,operation=operation,status='request_completed',
+            response=command,duration_ms=round((time.monotonic()-started)*1000))
         check_current()
         return result
     config=SETTINGS.snapshot()
@@ -304,7 +314,7 @@ async def music_worker(app):
     async def run_job(operation,turn,generation,precheck):
         started=time.monotonic()
         try:
-            await perform_music(app,operation,generation,precheck)
+            await perform_music(app,operation,generation,precheck,turn)
             if generation!=app['music_generation']:return
             app['music_last_error']=''
             LOG.info('MUSIC_DIRECT operation=%s seconds=%.3f',operation,time.monotonic()-started)
@@ -316,9 +326,14 @@ async def music_worker(app):
             raise
         except (aiohttp.ClientError,asyncio.TimeoutError,RuntimeError,ValueError,TypeError) as error:
             if generation!=app['music_generation']:return
-            app['music_last_error']='音乐指令未能完成，请稍后再试。'
+            unconfirmed=getattr(error,'ma_unconfirmed',False)
+            command=getattr(error,'ma_command','')
+            message=('MA 请求超时或连接中断，执行结果尚未确认；不要连续重复点播。' if unconfirmed
+                     else '音乐指令未能完成，请稍后再试。')
+            app['music_last_error']=message
             LOG.warning('MUSIC_DIRECT failed=%s',type(error).__name__)
-            log_event(app,'ERROR','MA',turn,operation=operation,status='failed',error_kind=type(error).__name__,
+            log_event(app,'ERROR','MA',turn,operation=operation,status='unconfirmed' if unconfirmed else 'failed',
+                response=(command+'：' if command else '')+message,error_kind=type(error).__name__,
                 duration_ms=round((time.monotonic()-started)*1000))
             if turn:
                 try:

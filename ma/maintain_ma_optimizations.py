@@ -246,7 +246,7 @@ def main(argv=None):
                     raise ValueError("拒绝覆盖不匹配的准备目录文件：" + item["path"])
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(data)
-            print("已准备 7 个已校验源码文件；未修改已安装 MA。")
+            print(f"已准备 {len(manifest['files'])} 个已校验源码文件；未修改已安装 MA。")
         else:
             action = "apply" if args.apply else "restore" if args.restore else "check"
             for path, state in maintain(source_base(args.source_root), action):

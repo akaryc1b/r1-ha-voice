@@ -254,6 +254,32 @@ class MusicPreemptionTests(unittest.IsolatedAsyncioTestCase):
         await self.control('停止');await self.app['music_jobs'].join()
         self.assertEqual(self.commands(),['music/search','player_queues/stop'])
 
+    async def test_play_timeout_records_unknown_outcome_and_does_not_resubmit(self):
+        events=[]
+        self.env['log_event']=lambda *args,**fields:events.append(fields)
+        async def hook(command,args):
+            if command=='player_queues/play_media':raise asyncio.TimeoutError()
+        self.hook=hook
+        await self.control('随机播放点音乐');await self.app['music_jobs'].join()
+        failed=[e for e in events if e.get('error_kind')=='TimeoutError']
+        self.assertEqual(len(failed),1)
+        self.assertEqual(failed[0]['status'],'unconfirmed')
+        self.assertIn('player_queues/play_media',failed[0]['response'])
+        self.assertIn('尚未确认',self.app['music_last_error'])
+        self.assertEqual(self.commands().count('player_queues/play_media'),1)
+
+    async def test_search_timeout_records_preparation_failure_without_mutation(self):
+        events=[]
+        self.env['log_event']=lambda *args,**fields:events.append(fields)
+        async def hook(command,args):
+            if command=='music/search':raise asyncio.TimeoutError()
+        self.hook=hook
+        await self.control('随机播放点音乐');await self.app['music_jobs'].join()
+        failed=[e for e in events if e.get('error_kind')=='TimeoutError']
+        self.assertEqual(failed[0]['status'],'failed')
+        self.assertIn('music/search',failed[0]['response'])
+        self.assertEqual(self.commands(),['music/search'])
+
     async def test_late_old_error_does_not_overwrite_new_control_status(self):
         started=asyncio.Event();release=asyncio.Event();cancel_seen=asyncio.Event();self.releases.append(release)
         async def hook(command,args):

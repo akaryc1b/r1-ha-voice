@@ -911,3 +911,60 @@
                  stream_pos_in_item = elapsed_time_queue_total - played_time
                  track_time = track_sec_skipped + stream_pos_in_item * entry_speed
                  break
+--- a/providers/apple_music/media.py
++++ b/providers/apple_music/media.py
+@@ -2,10 +2,14 @@
+ 
+ from __future__ import annotations
+ 
++import asyncio
++import os
+ from typing import TYPE_CHECKING, cast
+ 
+ from music_assistant_models.enums import MediaType
+-from music_assistant_models.errors import MediaNotFoundError, MusicAssistantError
++from music_assistant_models.errors import (
++    MediaNotFoundError, MusicAssistantError, ResourceTemporarilyUnavailable, RetriesExhausted,
++)
+ from music_assistant_models.media_items import (
+     Album,
+     Artist,
+@@ -255,7 +259,7 @@
+         if not response or "data" not in response:
+             return result
+         playlist_track_ids = [track["id"] for track in response["data"] if track and track["id"]]
+-        rating_response = await self.api.get_ratings(playlist_track_ids, MediaType.TRACK)
++        rating_response = await self._get_playlist_ratings(playlist_track_ids)
+         for index, track in enumerate(response["data"]):
+             if track and track["id"]:
+                 is_favourite = rating_response.get(track["id"])
+@@ -263,6 +267,29 @@
+                 parsed_track.position = offset + index + 1
+                 result.append(parsed_track)
+         return result
++
++    async def _get_playlist_ratings(self, track_ids: list[str]) -> dict[str, bool]:
++        """收藏查询属于可选展示信息，不能阻塞已经取得曲目的歌单。"""
++        if not track_ids:
++            return {}
++        try:
++            budget = float(os.environ.get("R1_APPLE_PLAYLIST_RATINGS_TIMEOUT", "2"))
++        except ValueError:
++            budget = 2.0
++        if not 0 <= budget <= 10:
++            budget = 2.0
++        if budget == 0:
++            return {}
++        try:
++            async with asyncio.timeout(budget):
++                return await self.api.get_ratings(track_ids, MediaType.TRACK)
++        except (TimeoutError, ResourceTemporarilyUnavailable, RetriesExhausted) as error:
++            # 不捕获认证错误或外部取消，不修改收藏同步和收藏写入接口。
++            self.logger.warning(
++                "Playlist ratings unavailable (%s); continuing with fetched tracks",
++                type(error).__name__,
++            )
++            return {}
+ 
+     async def _get_station_tracks(self, station_id: str) -> list[Track]:
+         """Fetch the next batch of tracks for a radio station."""

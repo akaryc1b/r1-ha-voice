@@ -1,10 +1,11 @@
 # 当前 MA 优化备份
 
-仅针对 MA 2.10.6 的固定官方提交 `c24866405bd2068c25a60e1014e5ef8c3f6445bb`。仓库保存统一差异 `ma-optimizations.patch`、哈希清单和维护工具，不包含成对的全量源码快照。7 个 before 哈希均逐字节匹配该官方提交，可从官方地址可靠重建。`ma-queue-environment.patch` 从早期优化版迁移，`ma-latency-upgrade.patch` 从队列配置版迁移，`ma-network-upgrade.patch` 从上一版加载优化迁移；各路径直接生成当前优化版，核对输入、输出与补丁哈希，拒绝未知源码。
+仅针对 MA 2.10.6 的固定官方提交 `c24866405bd2068c25a60e1014e5ef8c3f6445bb`。仓库保存统一差异 `ma-optimizations.patch`、哈希清单和维护工具，不包含成对的全量源码快照。8 个 before 哈希均逐字节匹配该官方提交，可从官方地址可靠重建。`ma-queue-environment.patch` 从早期优化版迁移，`ma-latency-upgrade.patch` 从队列配置版迁移，`ma-network-upgrade.patch` 从上一版加载优化迁移；各路径直接生成当前优化版，核对输入、输出与补丁哈希，拒绝未知源码。
 
 | 改动文件 | 目的 |
 | --- | --- |
 | providers/apple_music/streaming.py | 小规模、短时元数据缓存 |
+| providers/apple_music/media.py | 歌单已取得曲目时，可选收藏标记查询最多等待 2 秒 |
 | controllers/player_queues/stream_feeder.py | 原部署 R1 下一首预热 |
 | controllers/player_queues/queue_loader.py | 拆分取流耗时，并把适用首播的补封面移到缓冲就绪后 |
 | controllers/streams/controller.py | R1 DLNA 备用流的有界起始预读 |
@@ -26,6 +27,8 @@ MA 启动恢复 R1 的待机队列后，会提前准备当前歌曲的播放详�
 
 默认对上述短续播顺序读取使用 MA 现有 HTTP 客户端，再将原始加密字节送入 FFmpeg。多地址连接由现有客户端处理，不固定 CDN IP、不新建服务或绕过 TLS 验证。断线最多重试两次，按已交付字节请求 Range；服务器不接受续传或返回错位范围时明确失败，不重复拼接音频。连接等待 8 秒、读等待 15 秒，取消播放会关闭响应。显式自定义 FFmpeg 输入参数、较远 seek 仍使用原读取方式；MA 环境变量 `R1_APPLE_HTTP_PIPE=0` 可关闭该功能，重启后生效。
 
+Apple 歌单曲目读取成功后，收藏标记属于可选展示信息。此查询默认最多等 2 秒；超时或限流重试耗尽时取消该查询，使用已取得的完整曲目列表继续播放。MA 环境变量 `R1_APPLE_PLAYLIST_RATINGS_TIMEOUT` 可设为 0～10 秒（支持小数）；0 跳过歌单收藏标记查询，非法值回退为 2 秒。修改后重启 MA。此路径适用于 Apple 歌单，不按 R1 队列区分；收藏同步、收藏写入和单曲详情查询未修改，认证错误和外部取消仍正常传播。降级后的歌单列表可能暂缺收藏标记，沿用原有歌单缓存期限；不会发送取消收藏请求。必要的搜索、曲目读取或播放授权若被 Apple 限流，仍可能无法开播，不能靠延长网关超时或无限重试解决。
+
 ## 核对、应用与回退
 
 在 MA 容器对应 Python 环境执行，默认从已安装包定位源码，也可用 `--source-root` 指定 `music_assistant` 包目录：
@@ -36,7 +39,7 @@ python ma/maintain_ma_optimizations.py --apply --source-root "$MA_SOURCE_ROOT"
 python ma/maintain_ma_optimizations.py --restore --source-root "$MA_SOURCE_ROOT"
 ```
 
-`--check` 只读。工具校验补丁自身哈希、全部 7 个目标的 before/after 哈希、精确 hunk 上下文与结果哈希；只兼容纯 CRLF/LF 差异，拒绝未知版本或其它用户改动。验证全部通过才写入；单文件采用同目录原子替换，运行期间写入失败会恢复本次已写的文件。多文件更新不能保证突然断电下的事务原子性。重复应用/回退均不重复修改。应用或回退后由维护者重启已有 MA 容器，工具不会自动重启或操作播放。
+`--check` 只读。工具校验补丁自身哈希、全部 8 个目标的 before/after 哈希、精确 hunk 上下文与结果哈希；只兼容纯 CRLF/LF 差异，拒绝未知版本或其它用户改动。验证全部通过才写入；单文件采用同目录原子替换，运行期间写入失败会恢复本次已写的文件。多文件更新不能保证突然断电下的事务原子性。重复应用/回退均不重复修改。应用或回退后由维护者重启已有 MA 容器，工具不会自动重启或操作播放。
 
 ## 隔离重建与测试
 
@@ -51,7 +54,7 @@ python -m unittest discover -s tests -p 'test_ma_*.py' -v
 python ma/tests/test_flow_offset.py --source-root "$MA_TEST_SOURCE"
 ```
 
-`--prepare` 仅从固定官方提交下载 7 个文件并校验 before 哈希，再套用同一补丁重建测试源码，不访问已安装 MA。缓存及测试源码应放在仓库外；缓存不匹配会报错，不会静默覆盖。需要准备原版时加 `--state before`。不设置测试目录时，测试会按需从系统临时目录中的固定官方缓存重建，首次运行需要网络；设置目录后可离线运行。测试依赖此统一补丁，不再依赖已移除的 `ma-final` 快照。
+`--prepare` 仅从固定官方提交下载 8 个文件并校验 before 哈希，再套用同一补丁重建测试源码，不访问已安装 MA。缓存及测试源码应放在仓库外；缓存不匹配会报错，不会静默覆盖。需要准备原版时加 `--state before`。不设置测试目录时，测试会按需从系统临时目录中的固定官方缓存重建，首次运行需要网络；设置目录后可离线运行。测试依赖此统一补丁，不再依赖已移除的 `ma-final` 快照。
 
 `airplay-restoration/maintain_airplay_provider.py` 记录现有 N1 的补齐方式，需要本机已有的官方恢复归档；公开仓库不包含该归档。一般完整官方 MA 镜像已有配套文件，精简镜像按环境文档核对依赖。
 
@@ -61,7 +64,7 @@ python ma/tests/test_flow_offset.py --source-root "$MA_TEST_SOURCE"
 
 同一逻辑播放器可选 Snapcast 输出，保留 AirPlay 回退及原 HA 队列。
 源码、来源核对、纯Python依赖、R1接收端构建和回退见 [snapcast/README.md](snapcast/README.md)。
-它不要求重建 HA/MA 数据；使用本仓库七源补丁可同时修复原 R1 flow 同曲预载的进度问题。
+它不要求重建 HA/MA 数据；使用本仓库统一补丁可同时修复原 R1 flow 同曲预载的进度问题。
 Snapcast 官方使用flow模式，不具备原生PAUSE，暂停按STOP/RESUME模拟；
 需要按实际验收确认进度、恢复耗时及与语音的共存，不能仅凭“连接成功”认定全面替代。
 

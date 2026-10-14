@@ -54,7 +54,7 @@ class PatchLifecycleTests(unittest.TestCase):
         return {path:(self.base/path).read_bytes() for path in self.before}
 
     def test_preview_apply_reapply_restore_rerestore(self):
-        self.assertEqual(len(tool.maintain(self.base,'check')),7)
+        self.assertEqual(len(tool.maintain(self.base,'check')),len(self.manifest['files']))
         self.assertEqual(self.actual(),self.before)
         tool.maintain(self.base,'apply')
         self.assertEqual(self.actual(),self.after)
