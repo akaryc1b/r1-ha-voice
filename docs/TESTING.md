@@ -9,11 +9,13 @@
 | gateway | 配置、HTTP/WS、PCM16/Float32、音乐抢占和预检复用、LRU、日志、部署入口、硬件音量轮询 | Python 3.12，deployment/requirements.txt |
 | java | AI 分句、取消、续听、音量、设置缓存、PCM 编码、共享意图规则、hook 事务和构建输入契约 | Python + JDK 11 |
 | ma | 固定上游下载与 SHA、精确补丁、幂等/回退、封面、预取、flow 进度 | Python 3.14，music-assistant-models 1.1.205 |
-| ha | 中文句式、模板、专辑续播、音量范围、配置渲染 | Python 3.14，Home Assistant 2026.10.1 |
+| ha | 中文句式、模板、专辑续播、音量范围、配置渲染 | Python 3.14，ha/requirements-test.txt |
 | frontend | 卡片定时器与 URL、模拟端点的日志页面 | Node.js、Python + Playwright Chromium |
 | container | 两个架构镜像构建、显式模型下载/校验、启动健康、SIGTERM 停止 | Linux Docker，amd64 / arm64 |
 
 MA 官方源码包含 Python 3.14 语法，不能用 Python 3.10 的解析失败判断补丁失效。各组依赖独立安装，避免将 HA 和 MA 的依赖混入同一全局环境。
+
+HA 测试额外固定 `hassil==3.12.1`，与 HA 2026.10.1 Conversation 清单一致；仅安装 HA core wheel 不会自动带上这个可选组件依赖。
 
 从仓库根目录运行单组：
 

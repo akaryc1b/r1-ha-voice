@@ -1,0 +1,3 @@
+# HA Conversation 的可选依赖不会随 HA core wheel 自动安装。
+homeassistant==2026.10.1
+hassil==3.12.1
