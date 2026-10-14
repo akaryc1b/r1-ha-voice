@@ -87,9 +87,9 @@ def read_migrations(manifest):
     return checked_patch(manifest, "previous_patch", paths)
 
 
-def read_upgrade(manifest):
-    paths = [item["path"] for item in manifest["files"] if "upgrade_from_sha256" in item]
-    return checked_patch(manifest, "upgrade_patch", paths) if paths else {}
+def read_upgrade(manifest, kind="upgrade"):
+    paths = [item["path"] for item in manifest["files"] if kind + "_from_sha256" in item]
+    return checked_patch(manifest, kind + "_patch", paths) if paths else {}
 
 
 def transform(data, item, hunks, reverse=False):
@@ -177,7 +177,11 @@ def replace_bytes(path, data):
 def maintain(base, action):
     manifest, patches = read_bundle()
     migrations = read_migrations(manifest)
-    upgrades = read_upgrade(manifest)
+    upgrades = {}
+    for kind in ("upgrade", "network_upgrade"):
+        for path, hunks in read_upgrade(manifest, kind).items():
+            item = next(item for item in manifest["files"] if item["path"] == path)
+            upgrades[(path, item[kind + "_from_sha256"])] = hunks
     plan = []
     for item in manifest["files"]:
         target = (base / relative_path(item["path"])).resolve()
@@ -187,15 +191,15 @@ def maintain(base, action):
         current = normalized(original)
         digest = sha(current)
         previous = digest == item.get("previous_after_sha256")
-        upgrade = digest == item.get("upgrade_from_sha256")
+        upgrade = (item["path"], digest) in upgrades
         if digest not in (item["before_sha256"], item["after_sha256"]) and not (previous or upgrade):
             raise ValueError("MA 源码不属于已验证版本：" + item["path"])
         before = digest == item["before_sha256"]
         if previous or upgrade:
-            source_key = "previous_after_sha256" if previous else "upgrade_from_sha256"
-            transition = {"path":item["path"], "before_sha256":item[source_key],
+            transition = {"path":item["path"], "before_sha256":digest,
                           "after_sha256":item["after_sha256"]}
-            current = transform(current, transition, (migrations if previous else upgrades)[item["path"]])
+            hunks = migrations[item["path"]] if previous else upgrades[(item["path"], digest)]
+            current = transform(current, transition, hunks)
         # 预览同样核对 hunk 和最终哈希；先验证所有文件再写入。
         opposite = transform(current, item, patches[item["path"]], reverse=not before)
         payload = opposite if ((action == "apply" and before) or (action == "restore" and not before)) else original

@@ -1,0 +1,306 @@
+--- a/providers/apple_music/streaming.py
++++ b/providers/apple_music/streaming.py
+@@ -68,7 +68,9 @@
+ 
+     async def get_stream_details(self, item_id: str) -> StreamDetails:
+         """Return StreamDetails for a single catalog or library track."""
++        started = time.monotonic()
+         stream_metadata = await self._fetch_song_stream_metadata(item_id)
++        metadata_done = time.monotonic()
+         if is_library_id(item_id):
+             try:
+                 stream_url = stream_metadata["assets"][0]["URL"]
+@@ -92,15 +94,22 @@
+             )
+         license_url = stream_metadata["hls-key-server-url"]
+         stream_url, uri = await self._parse_stream_url_and_uri(stream_metadata["assets"])
++        playlist_done = time.monotonic()
+         if not stream_url or not uri:
+             raise MediaNotFoundError("No stream URL found for song.")
+         key_id = base64.b64decode(uri.split(",")[1])
++        decryption_key = await self._get_decryption_key(license_url, key_id, uri, item_id)
++        self.logger.info(
++            "R1_APPLE_DETAILS metadata=%.3f playlist=%.3f license=%.3f total=%.3f",
++            metadata_done - started, playlist_done - metadata_done,
++            time.monotonic() - playlist_done, time.monotonic() - started,
++        )
+         return StreamDetails(
+             item_id=item_id,
+             provider=self.provider.instance_id,
+             audio_format=AudioFormat(content_type=ContentType.MP4, codec_type=ContentType.AAC),
+             stream_type=StreamType.ENCRYPTED_HTTP,
+-            decryption_key=await self._get_decryption_key(license_url, key_id, uri, item_id),
++            decryption_key=decryption_key,
+             path=stream_url,
+             can_seek=True,
+             allow_seek=True,
+@@ -194,6 +203,7 @@
+         ):
+             self.logger.debug("Decryption key for %s found in cache.", item_id)
+             return cast("str", decryption_key)
++        license_started = time.monotonic()
+         pssh = self._build_pssh(key_id)
+         device = Device(
+             client_id=self._decrypt_client_id,
+@@ -206,12 +216,19 @@
+         session_id = cdm.open()
+         try:
+             challenge = cdm.get_license_challenge(session_id, pssh)
++            request_started = time.monotonic()
+             track_license = await self._get_license(challenge, license_url, uri, item_id)
++            response_received = time.monotonic()
+             cdm.parse_license(session_id, track_license)
+             key = next((key for key in cdm.get_keys(session_id) if key.type == "CONTENT"), None)
+             if not key:
+                 raise MediaNotFoundError(f"Unable to get decryption key for song {item_id}.")
+             decryption_key = key.key.hex()
++            self.logger.info(
++                "R1_APPLE_LICENSE setup=%.3f request=%.3f parse=%.3f",
++                request_started - license_started, response_received - request_started,
++                time.monotonic() - response_received,
++            )
+         finally:
+             cdm.close(session_id)
+         self.provider.mass.create_task(
+--- a/controllers/player_queues/stream_feeder.py
++++ b/controllers/player_queues/stream_feeder.py
+@@ -11,6 +11,7 @@
+ 
+ import asyncio
+ import os
++import time
+ from copy import copy
+ from typing import TYPE_CHECKING
+ 
+@@ -22,6 +23,7 @@
+     AudioError,
+     MediaNotFoundError,
+     QueueEmpty,
++    ProviderUnavailableError,
+ )
+ 
+ from music_assistant.constants import (
+@@ -32,6 +34,7 @@
+ from music_assistant.models.music_provider import MusicProvider
+ 
+ R1_MA_QUEUE_ID = os.environ.get("R1_MA_QUEUE_ID", "upbac50e55").strip()
++R1_IDLE_DETAILS_REFRESH = os.environ.get("R1_IDLE_DETAILS_REFRESH", "1").strip() == "1"
+ if not R1_MA_QUEUE_ID:
+     raise ValueError("R1_MA_QUEUE_ID must not be empty")
+ 
+@@ -60,6 +63,8 @@
+         if next_item is None or next_item.queue_item_id == queue_item_id:
+             return None
+         queue_data = self._queue_data[queue_id]
++        if queue_id == R1_MA_QUEUE_ID and queue_data.transitioning:
++            return None
+         preparation_session = queue_data.session_id
+         # AudioSource items are realtime/live and bypass the AudioBuffer
+         if next_item.media_type == MediaType.AUDIO_SOURCE:
+@@ -82,7 +87,7 @@
+                     prepared_item = await self.load_next_queue_item(queue_id, queue_item_id)
+                 except QueueEmpty:
+                     return
+-                if queue_id == R1_MA_QUEUE_ID and queue_data.session_id != preparation_session:
++                if queue_id == R1_MA_QUEUE_ID and (queue_data.session_id != preparation_session or queue_data.transitioning):
+                     return
+                 # unplayable items are skipped, so the prepared item can be a later one
+                 queue_data.next_item_id_preparing = prepared_item.queue_item_id
+@@ -270,28 +275,36 @@
+         task_id = f"enqueue_next_item_{queue_id}"
+         self.mass.call_later(1, _enqueue_next_item_on_player, next_item, task_id=task_id)
+ 
+-    async def _preload_r1_idle_resume(self, queue_id: str, item_id: str, attempt: int = 0) -> None:
++    async def _preload_r1_idle_resume(self, queue_id: str, item_id: str, attempt: int = 0, refresh: bool = False) -> None:
+         """启动时只准备现有待机曲目的播放详情，不收音、不创建 PCM 流。"""
+         data = self._queue_data.get(queue_id)
+         if data is None or data.queue.state != PlaybackState.IDLE or data.transitioning:
+             return
+         current = data.queue.current_item
+         item = self.get_item(queue_id, item_id)
+-        if current is None or current.queue_item_id != item_id or item is None or item.media_type != MediaType.TRACK:
++        current_index = data.queue.current_index
++        if item is None or item.media_type != MediaType.TRACK:
++            return
++        if (current is not None and current.queue_item_id != item_id) or self.get_item(queue_id, current_index) is not item:
+             return
+         session = data.session_id
+         original_details = item.streamdetails
+         candidate = copy(item)
+-        if original_details is not None:
++        if original_details is not None and not refresh:
+             candidate.streamdetails = copy(original_details)
++        elif refresh:
++            candidate.streamdetails = None
+         try:
+-            await asyncio.wait_for(self._load_item(candidate), timeout=8)
+-        except (AudioError, MediaNotFoundError, TimeoutError) as error:
++            await asyncio.wait_for(self._load_item(candidate), timeout=30)
++        except (AudioError, MediaNotFoundError, ProviderUnavailableError, TimeoutError) as error:
+             self.logger.info("R1 idle details prefetch unavailable: %s", type(error).__name__)
+             # 音源可能晚于队列就绪；仅启动预取有界重试，不周期取流。
+-            if isinstance(error, MediaNotFoundError) and attempt < 3:
++            if (
++                (isinstance(error, (MediaNotFoundError, ProviderUnavailableError)) and attempt < 6)
++                or (refresh and attempt < 2)
++            ):
+                 self.mass.call_later(
+-                    5, self._preload_r1_idle_resume, queue_id, item_id, attempt + 1,
++                    5, self._preload_r1_idle_resume, queue_id, item_id, attempt + 1, refresh,
+                     task_id=f"r1_idle_details_retry_{queue_id}",
+                 )
+             return
+@@ -300,14 +313,22 @@
+             and data.session_id == session
+             and data.queue.state == PlaybackState.IDLE
+             and not data.transitioning
+-            and data.queue.current_item is current
++            and data.queue.current_index == current_index
++            and (data.queue.current_item is None or data.queue.current_item.queue_item_id == item_id)
+             and self.get_item(queue_id, item_id) is item
+             and item.streamdetails is original_details
+         ):
+             item.streamdetails = candidate.streamdetails
+-            if current is not item:
+-                current.streamdetails = candidate.streamdetails
++            if data.queue.current_item is not None and data.queue.current_item is not item:
++                data.queue.current_item.streamdetails = candidate.streamdetails
+             self.logger.info("R1_IDLE_DETAILS_PREFETCH ready=true")
++            details = candidate.streamdetails
++            if R1_IDLE_DETAILS_REFRESH and details is not None and details.expiration > 0:
++                delay = max(30, details.created_at + details.expiration - time.time() - 30)
++                self.mass.call_later(
++                    delay, self._preload_r1_idle_resume, queue_id, item_id, 0, True,
++                    task_id=f"r1_idle_details_refresh_{queue_id}",
++                )
+ 
+     async def _preload_r1_manual_successor(self, queue_id: str, current_item_id: str) -> None:
+         """Prepare manual-next details when repeat-one selects the current track."""
+--- a/controllers/player_queues/queue_loader.py
++++ b/controllers/player_queues/queue_loader.py
+@@ -321,6 +321,7 @@
+         deferred_artwork: Track | None = None
+         if is_start and queue_id == R1_MA_QUEUE_ID:
+             self.mass.cancel_task(f"r1_artwork_{queue_id}")
++            self.mass.cancel_task(f"prepare_next_audio_buffer_{queue_id}")
+         r1_started=time.monotonic()
+         r1_abort=0.0
+         r1_buffer=0.0
+--- a/controllers/streams/audio.py
++++ b/controllers/streams/audio.py
+@@ -169,6 +169,8 @@
+ R1_APPLE_SEQUENTIAL_SEEK_MAX_SECONDS = int(os.environ.get("R1_APPLE_SEQUENTIAL_SEEK_MAX_SECONDS", "120"))
+ if not 0 <= R1_APPLE_SEQUENTIAL_SEEK_MAX_SECONDS <= 600:
+     raise ValueError("R1_APPLE_SEQUENTIAL_SEEK_MAX_SECONDS must be between 0 and 600")
++
++R1_APPLE_HTTP_PIPE = os.environ.get("R1_APPLE_HTTP_PIPE", "1").strip() == "1"
+ 
+ 
+ if TYPE_CHECKING:
+@@ -3872,6 +3874,40 @@
+             raise last_audio_error
+         return None
+ 
++    async def _get_r1_apple_http_stream(self, url: str) -> AsyncGenerator[bytes]:
++        """顺序读取 Apple 音频；断线按已交付字节续传，不重复或跳过数据。"""
++        offset = 0
++        validator = None
++        for attempt in range(3):
++            headers = {"Accept-Encoding": "identity"}
++            if offset:
++                headers["Range"] = f"bytes={offset}-"
++                if validator:
++                    headers["If-Range"] = validator
++            try:
++                async with self.mass.http_session.get(
++                    encoded_request_url(url), headers=headers, auto_decompress=False,
++                    timeout=ClientTimeout(total=None, connect=8, sock_read=15),
++                ) as response:
++                    if response.status != (206 if offset else 200):
++                        raise AudioError(f"Apple audio HTTP status {response.status}")
++                    if offset:
++                        matched = re.fullmatch(r"bytes ([0-9]+)-([0-9]+)/([0-9]+|\*)", response.headers.get("Content-Range", ""))
++                        if matched is None or int(matched[1]) != offset:
++                            raise AudioError("Apple audio resume range mismatch")
++                    else:
++                        etag = response.headers.get("ETag", "")
++                        validator = etag if etag and not etag.startswith("W/") else response.headers.get("Last-Modified")
++                    async for chunk in response.content.iter_chunked(65536):
++                        offset += len(chunk)
++                        yield chunk
++                    return
++            except (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError, TimeoutError) as error:
++                if attempt == 2:
++                    raise AudioError(f"Apple audio connection failed: {type(error).__name__}") from error
++                self.logger.info("R1_APPLE_HTTP_RETRY attempt=%d resumed=%s", attempt + 1, offset > 0)
++        raise AudioError("Apple audio connection unavailable")
++
+     async def _get_media_stream(
+         self,
+         streamdetails: StreamDetails,
+@@ -3931,6 +3967,14 @@
+         ):
+             extra_input_args += ["-seekable", "0"]
+             r1_sequential_apple = True
++            if (
++                R1_APPLE_HTTP_PIPE
++                and isinstance(audio_source, str)
++                and extra_input_args[:-2] == ["-decryption_key", streamdetails.decryption_key]
++            ):
++                # 复用 MA 的多地址快速连接；原始加密字节仍交给同一 FFmpeg 解码。
++                audio_source = self._get_r1_apple_http_stream(audio_source)
++                extra_input_args = extra_input_args[:-2]
+ 
+         # handle seek support
+         if seek_position and streamdetails.duration and streamdetails.allow_seek:
+--- a/controllers/player_queues/controller.py
++++ b/controllers/player_queues/controller.py
+@@ -1251,7 +1251,7 @@
+         # always call update to calculate state etc
+         self.on_player_update(player, {})
+         self.mass.signal_event(EventType.QUEUE_ADDED, object_id=queue_id, data=queue_data.queue)
+-        if queue_id == R1_MA_QUEUE_ID and (item := queue_data.queue.current_item):
++        if queue_id == R1_MA_QUEUE_ID and (item := self.get_item(queue_id, queue_data.queue.current_index)):
+             self.mass.create_task(
+                 self._preload_r1_idle_resume, queue_id, item.queue_item_id,
+                 task_id=f"r1_idle_details_{queue_id}", abort_existing=True,
+--- a/controllers/player_queues/playback_tracker.py
++++ b/controllers/player_queues/playback_tracker.py
+@@ -12,6 +12,7 @@
+ from __future__ import annotations
+ 
+ import asyncio
++import os
+ import time
+ from contextlib import suppress
+ from typing import TYPE_CHECKING
+@@ -52,6 +53,11 @@
+ from music_assistant.helpers.compare import compare_item_ids
+ from music_assistant.helpers.util import get_changed_keys, percentage
+ from music_assistant.models.player import Player
++
++R1_MA_QUEUE_ID = os.environ.get("R1_MA_QUEUE_ID", "upbac50e55").strip()
++if not R1_MA_QUEUE_ID:
++    raise ValueError("R1_MA_QUEUE_ID must not be empty")
++
+ 
+ if TYPE_CHECKING:
+     from music_assistant_models.player_queue import PlayerQueue
+@@ -217,6 +223,17 @@
+             self._queue_data[queue_id].prev_state = new_state
+         else:
+             self._queue_data[queue_id].prev_state = None
++
++        if (
++            queue_id == R1_MA_QUEUE_ID
++            and queue.state == PlaybackState.IDLE
++            and "state" in changed_keys
++            and queue.current_item is not None
++        ):
++            self.mass.call_later(
++                1, self._preload_r1_idle_resume, queue_id, queue.current_item.queue_item_id,
++                task_id=f"r1_idle_details_{queue_id}",
++            )
+ 
+         # return early if nothing changed
+         if len(changed_keys) == 0:

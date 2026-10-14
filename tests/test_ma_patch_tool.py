@@ -34,6 +34,12 @@ class PatchLifecycleTests(unittest.TestCase):
             if 'upgrade_from_sha256' not in item:continue
             transition={'path':item['path'],'before_sha256':item['upgrade_from_sha256'],'after_sha256':item['after_sha256']}
             cls.upgrade_from[item['path']]=tool.transform(cls.after[item['path']],transition,upgrades[item['path']],reverse=True)
+        network=tool.read_upgrade(cls.manifest,'network_upgrade')
+        cls.network_from=dict(cls.after)
+        for item in cls.manifest['files']:
+            if 'network_upgrade_from_sha256' not in item:continue
+            transition={'path':item['path'],'before_sha256':item['network_upgrade_from_sha256'],'after_sha256':item['after_sha256']}
+            cls.network_from[item['path']]=tool.transform(cls.after[item['path']],transition,network[item['path']],reverse=True)
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix='r1-ma-patch-test-')
@@ -93,6 +99,16 @@ class PatchLifecycleTests(unittest.TestCase):
         tool.maintain(self.base,'apply')
         self.assertEqual(self.actual(),self.after)
         for path,data in self.upgrade_from.items():(self.base/path).write_bytes(data)
+        tool.maintain(self.base,'restore')
+        self.assertEqual(self.actual(),self.before)
+
+    def test_published_latency_fix_can_upgrade_and_restore(self):
+        for path,data in self.network_from.items():(self.base/path).write_bytes(data)
+        tool.maintain(self.base,'check')
+        self.assertEqual(self.actual(),self.network_from)
+        tool.maintain(self.base,'apply')
+        self.assertEqual(self.actual(),self.after)
+        for path,data in self.network_from.items():(self.base/path).write_bytes(data)
         tool.maintain(self.base,'restore')
         self.assertEqual(self.actual(),self.before)
 
@@ -172,7 +188,7 @@ class PatchLifecycleTests(unittest.TestCase):
             # 所有限制引用同一环境常量，旧默认值只出现在默认配置中。
             self.assertEqual(data.count(b'upbac50e55'),1)
             guarded.append(path)
-        self.assertEqual(len(guarded),5)
+        self.assertEqual(len(guarded),6)
 
 
 if __name__=='__main__':

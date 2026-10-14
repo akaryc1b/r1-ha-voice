@@ -33,7 +33,7 @@ class PrewarmOwnershipTests(unittest.IsolatedAsyncioTestCase):
         self.buffer = SimpleNamespace(is_buffering=True, clear=AsyncMock())
         self.details = SimpleNamespace(buffer=None, queue_session_id="old")
         self.item = SimpleNamespace(queue_item_id="next", name="synthetic next", media_type="track", streamdetails=self.details)
-        self.queue = SimpleNamespace(session_id="old", next_item_id_preparing=None,
+        self.queue = SimpleNamespace(session_id="old", next_item_id_preparing=None, transitioning=False,
                                      queue=SimpleNamespace(display_name="r1"))
         async def audio(item, **kwargs):
             item.streamdetails.buffer = self.buffer
@@ -86,6 +86,19 @@ class PrewarmOwnershipTests(unittest.IsolatedAsyncioTestCase):
         self.host.load_next_queue_item.side_effect = load
         self.release.set()
         await prepare(self.host, "r1", "current")
+        self.assertFalse(self.started.is_set())
+
+    async def test_foreground_transition_blocks_new_background_source(self):
+        self.queue.transitioning=True
+        self.assertIsNone(prepare(self.host,"r1","current"))
+        self.host.load_next_queue_item.assert_not_awaited()
+
+    async def test_foreground_transition_during_metadata_load_blocks_background_source(self):
+        async def load(*args):
+            self.queue.transitioning=True
+            return self.item
+        self.host.load_next_queue_item.side_effect=load
+        await prepare(self.host,"r1","current")
         self.assertFalse(self.started.is_set())
 
 

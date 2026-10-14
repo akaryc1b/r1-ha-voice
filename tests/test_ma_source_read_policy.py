@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 from types import SimpleNamespace
 import unittest
+from unittest.mock import Mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ma"))
 from maintain_ma_optimizations import optimized_source
 
@@ -19,13 +20,16 @@ seek_condition=next(n for n in ast.walk(tree) if isinstance(n, ast.If) and
 code = compile(ast.Module(body=[*initializers,condition,seek_condition], type_ignores=[]), "actual_source_read_policy", "exec")
 
 class SourceReadPolicyTests(unittest.TestCase):
-    def options(self, seek=0, queue="r1", provider="apple_music--example", stream_type="encrypted", initial=None, maximum=120):
-        values = dict(streamdetails=SimpleNamespace(queue_id=queue, provider=provider, stream_type=stream_type,duration=300,allow_seek=True),
+    def options(self, seek=0, queue="r1", provider="apple_music--example", stream_type="encrypted", initial=None, maximum=120, piped=False):
+        values = dict(streamdetails=SimpleNamespace(queue_id=queue, provider=provider, stream_type=stream_type,duration=300,allow_seek=True,decryption_key="test-key"),
                       seek_position=seek, R1_MA_QUEUE_ID="r1",
                       R1_APPLE_SEQUENTIAL_SEEK_MAX_SECONDS=maximum,
+                      R1_APPLE_HTTP_PIPE=piped,
+                      audio_source="https://example.test/audio", self=SimpleNamespace(_get_r1_apple_http_stream=Mock(return_value="test-generator")),
                       StreamType=SimpleNamespace(ENCRYPTED_HTTP="encrypted"),
                       extra_input_args=list(initial or []))
         exec(code, values)
+        self.last_values=values
         return values["extra_input_args"],values["extra_output_args"]
 
     def args(self,*args,**kwargs):
@@ -51,6 +55,14 @@ class SourceReadPolicyTests(unittest.TestCase):
     def test_bounded_seek_is_an_output_trim_and_far_seek_retains_input_seek(self):
         self.assertEqual(self.options(76), (['-seekable','0'],['-ss','76']))
         self.assertEqual(self.options(121), (['-ss','121'],[]))
+
+    def test_pipe_keeps_decryption_and_output_seek_without_http_protocol_options(self):
+        self.assertEqual(self.options(76, initial=['-decryption_key','test-key'], piped=True), (['-decryption_key','test-key'],['-ss','76']))
+        self.assertEqual(self.last_values['audio_source'],'test-generator')
+
+    def test_explicit_network_options_keep_original_ffmpeg_reader(self):
+        self.options(initial=['-decryption_key','test-key','-headers','custom'], piped=True)
+        self.last_values['self']._get_r1_apple_http_stream.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()

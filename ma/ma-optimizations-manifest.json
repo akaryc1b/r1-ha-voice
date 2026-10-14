@@ -4,20 +4,25 @@
     {
       "path": "providers/apple_music/streaming.py",
       "before_sha256": "0cab62c0a9b152aa11412f2303c5e843ad89d64660aa83ec61aaad899308cf6f",
-      "after_sha256": "c749509c6e6f6f1cd1f000ee62182c5c983405f753e50a3bf79864b23595293d"
+      "after_sha256": "2638b228f2b6853efdc5fa3bb374b48685b5ddfc5908298267d09ecbd4f7de01",
+      "network_upgrade_from_sha256": "c749509c6e6f6f1cd1f000ee62182c5c983405f753e50a3bf79864b23595293d",
+      "upgrade_from_sha256": "c749509c6e6f6f1cd1f000ee62182c5c983405f753e50a3bf79864b23595293d"
     },
     {
       "path": "controllers/player_queues/stream_feeder.py",
       "before_sha256": "15f24848a93c1937c99c6b2bca945dd1731c38d3ffd6990f4e15e1b2741b7e88",
-      "after_sha256": "6e2c97f1c73352c252f5e37796ed7a07d11e69cb268ffdc3655347af86302f4d",
+      "after_sha256": "02bb7cc3728a7ea97d91575f4b706dcb594c132852ea1ad41b97ab65f620ef2a",
       "previous_after_sha256": "aa6f609d99a67efe4bff06bc49ada446478531360409d084f8c5e9c7922a1f22",
+      "network_upgrade_from_sha256": "6e2c97f1c73352c252f5e37796ed7a07d11e69cb268ffdc3655347af86302f4d",
       "upgrade_from_sha256": "0d980ef842bca4fd0c0b980bc97b21bfa9a140bc73cc14183f5b3b55e4e73c88"
     },
     {
       "path": "controllers/player_queues/queue_loader.py",
       "before_sha256": "ead02948ca4450d3651d0c90683df16a16e8b6e23a040bf16b3eb877756e7a0e",
-      "after_sha256": "bfd190d81fef9f427d8cf0e8102df30196f8dac3b55b69286e9aeeeb8c19bb44",
-      "previous_after_sha256": "f302a47e1d220b5b54d01b7c1da7574cf2993787916925f38265567d138389ca"
+      "after_sha256": "5d561f1206b1d254f06331061899b7dfc96705e666e2a45fcd5e16c94284bbd0",
+      "previous_after_sha256": "f302a47e1d220b5b54d01b7c1da7574cf2993787916925f38265567d138389ca",
+      "network_upgrade_from_sha256": "bfd190d81fef9f427d8cf0e8102df30196f8dac3b55b69286e9aeeeb8c19bb44",
+      "upgrade_from_sha256": "bfd190d81fef9f427d8cf0e8102df30196f8dac3b55b69286e9aeeeb8c19bb44"
     },
     {
       "path": "controllers/streams/controller.py",
@@ -28,25 +33,29 @@
     {
       "path": "controllers/streams/audio.py",
       "before_sha256": "8760c06cef4966917138983a5ea049a4de692ad18421b1043a8d6e15f4d1ccfd",
-      "after_sha256": "7de2c0bfd9e4b8a3023c34cfb8f6f1e5fd369f632a2736a52f616fdc58f6a4f3",
+      "after_sha256": "da486307e9a1f478f1c5426496215bdae2c3da5df6f9268b12af4bb6e27991e0",
       "previous_after_sha256": "947401f58daf8b2cf37195e334085838bef5c80bb416405a64983a30f26c956d",
+      "network_upgrade_from_sha256": "7de2c0bfd9e4b8a3023c34cfb8f6f1e5fd369f632a2736a52f616fdc58f6a4f3",
       "upgrade_from_sha256": "7bca5dfd436f16e21f4cf8604a36b3a646cb8f3cb1b100881fb833ad4ce43679"
     },
     {
       "path": "controllers/player_queues/controller.py",
       "before_sha256": "3d610ee9b643a5a338104fbf13d67d2b680b7d4570bc7dfe2364e4d9712b4588",
-      "after_sha256": "f4cda68c4749a4e94b70e1481665735da37e782cf90f62a855ec5f4ed59be81f",
+      "after_sha256": "0e042a409cd258b389b09275009ccbeea5ca84557a25fd8080afb01e97076d27",
       "previous_after_sha256": "65344e5169be3f7d45a7867add5d417035a1154e0a5448a4296609670706040a",
+      "network_upgrade_from_sha256": "f4cda68c4749a4e94b70e1481665735da37e782cf90f62a855ec5f4ed59be81f",
       "upgrade_from_sha256": "157a8a2090a1ab361a31ea52c5864ee029a333209db5d83e80c7f68198e77408"
     },
     {
       "path": "controllers/player_queues/playback_tracker.py",
       "before_sha256": "1a1273321b94f3e98dfc00eb7e056ea9fe50bf668c835d2c6d0e3f91148add99",
-      "after_sha256": "e921d33a3f45f9857cef1ce4933d25fa756c2115362a11963bf5c2f57a8d7a63"
+      "after_sha256": "9f509782e33134e6bf9c9dbf08db76ba5d68823ac15e53edb761247d15f2d2bb",
+      "network_upgrade_from_sha256": "e921d33a3f45f9857cef1ce4933d25fa756c2115362a11963bf5c2f57a8d7a63",
+      "upgrade_from_sha256": "e921d33a3f45f9857cef1ce4933d25fa756c2115362a11963bf5c2f57a8d7a63"
     }
   ],
   "dlna_experimental_change_restored": true,
-  "updated_at": "2026-10-14T08:54:35.588743+00:00",
+  "updated_at": "2026-10-14T10:05:16.946666+00:00",
   "r1_sequential_apple_initial_reads": true,
   "r1_button_debounce_seconds": 0.15,
   "r1_repeat_one_manual_successor_details_prefetch": true,
@@ -59,7 +68,7 @@
   "upstream_commit": "c24866405bd2068c25a60e1014e5ef8c3f6445bb",
   "upstream_url": "https://github.com/music-assistant/server/tree/c24866405bd2068c25a60e1014e5ef8c3f6445bb/music_assistant",
   "patch_file": "ma-optimizations.patch",
-  "patch_sha256": "8dd211c33670a30b7a444842ae2366bcd8527759378f2085c83b5ae9a93793df",
+  "patch_sha256": "ca6bda5a9d7faff227dc1f5b2f75254374cdb517bc3f543b23f5bef788e78b90",
   "queue_environment": {
     "name": "R1_MA_QUEUE_ID",
     "default": "upbac50e55",
@@ -67,9 +76,12 @@
     "restart_required": true
   },
   "previous_patch_file": "ma-queue-environment.patch",
-  "previous_patch_sha256": "b9647f4e2e1a63aad045a5a066884e459097272914a57e5388408ba84904d616",
+  "previous_patch_sha256": "3e2c8061594947498c06d16c41b0c47082584622c50c8978474973d5558870cd",
   "upgrade_patch_file": "ma-latency-upgrade.patch",
-  "upgrade_patch_sha256": "f3d1b0e5270da8044efeaf8f8a63c149c3bfa92d2f3c8cbbebdbb6ff4de86db9",
+  "upgrade_patch_sha256": "5486302c95e42ccdc6334384d161971c4844c484c4c512f15492c5ca8ee1090b",
+  "network_upgrade_patch_file": "ma-network-upgrade.patch",
+  "network_upgrade_patch_sha256": "4ba8969ed7b85c6960045e229c36387b696c120359eaa66a1c98ae0e1efec803",
+  "r1_apple_http_pipe_default": true,
   "r1_prewarm_session_ownership": true,
   "r1_startup_idle_details_prefetch": true,
   "r1_apple_sequential_seek_max_seconds_default": 120

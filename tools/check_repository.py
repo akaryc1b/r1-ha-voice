@@ -45,6 +45,7 @@ def main():
     manifest, _ = tool.read_bundle()
     tool.read_migrations(manifest)
     tool.read_upgrade(manifest)
+    tool.read_upgrade(manifest, "network_upgrade")
     snap = ROOT / 'ma/snapcast'
     manifest = json.loads((snap / 'upstream-manifest.json').read_text(encoding='utf-8'))
     for entry in manifest['files']:
