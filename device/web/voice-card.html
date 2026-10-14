@@ -18,6 +18,10 @@
 </div>
 <div class="form-item"><label><input id="cv-listen-music-mute" type="checkbox">收音时临时静音音乐</label><p class="cv-help">降低音箱自己的音乐对识别的干扰。收音结束恢复音乐声音，保留原音量和原有静音；助手播报音量不受影响。</p></div>
 <div class="form-item"><label><input id="cv-asr-retry-once" type="checkbox">没听清时，提示说完后自动再听一次</label><p class="cv-help">提示结束后可直接重说，无需再次唤醒。仅续听一次；网络故障不会反复收音，续听最多等待15秒。</p></div>
+<details class="cv-advanced"><summary>麦克风声道</summary>
+<div class="form-item"><label for="cv-channels">固件提供的输入格式</label><select id="cv-channels"><option value="1">单声道</option><option value="2">双声道</option></select></div>
+<div class="form-item"><label for="cv-channel-mix">双声道取音方式</label><select id="cv-channel-mix"><option value="left">左声道（保持原有方式）</option><option value="right">右声道</option><option value="mix">左右平均</option></select></div>
+<p class="cv-help">输入格式需与固件一致。两个声道都是麦克风时可尝试左右平均；若另一个声道是回声参考，选择主麦声道。单声道输入不受取音方式影响。</p></details>
 <details class="cv-advanced"><summary>AI 回答速度</summary>
 <div class="form-item"><label><input id="cv-ai-streaming" type="checkbox">收到完整首句后开始播报，其余回答按顺序继续</label></div>
 <div class="form-item"><label>等待 AI 首段正文（秒）</label><input id="cv-ai-first-content" type="number" min="0.5" max="30" step="0.5"></div>

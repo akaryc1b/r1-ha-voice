@@ -89,6 +89,7 @@ chmod +x /etc/init.d/r1-local-asr
 
 ~~~text
 gateway/voice_gateway.py
+gateway/stop_gateway.py
 gateway/gateway_config.py
 gateway/event_log.py
 gateway/audio_transport.py

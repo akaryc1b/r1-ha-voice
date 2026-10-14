@@ -19,7 +19,7 @@ final class VoiceSettingsCache {
     private long loaded;
     private long modified;
     private long length;
-    private boolean failed;
+    private Exception lastError;
 
     VoiceSettingsCache(File file) {
         this(file,new Clock(){public long millis(){return System.nanoTime()/1000000L;}},1000,30000);
@@ -31,12 +31,14 @@ final class VoiceSettingsCache {
 
     private void refresh() throws Exception {
         long now=clock.millis();
-        if ((snapshot==null && !failed) || now-checked>=checkMillis) {
+        if ((snapshot==null && lastError==null) || now-checked>=checkMillis) {
             checked=now;
             try {
                 long currentModified=file.lastModified();
                 long currentLength=file.isFile()?file.length():-1;
-                if (snapshot==null || failed || currentModified!=modified || currentLength!=length ||
+                if (parsed!=null && length>=0 && currentLength<0)
+                    throw new IOException("Voice settings file unavailable");
+                if (snapshot==null || lastError!=null || currentModified!=modified || currentLength!=length ||
                         now-loaded>=reloadMillis) {
                     if (currentLength>16384) throw new IOException("Voice settings too large");
                     String candidate="{}";
@@ -57,10 +59,11 @@ final class VoiceSettingsCache {
                     snapshot=candidate;modified=currentModified;length=currentLength;loaded=now;
                     parsed=candidateParsed;
                 }
-                failed=false;
-            }catch(Exception error){failed=true;}
+                lastError=null;
+            }catch(Exception error){lastError=error;}
         }
-        if (failed) throw new IOException("Voice settings reload failed");
+        // 外部写入或短暂 I/O 失败不能撤销已经验证的内存配置。
+        if (parsed==null && lastError!=null) throw new IOException("Voice settings reload failed",lastError);
     }
 
     synchronized JSONObject read() throws Exception {
@@ -83,6 +86,6 @@ final class VoiceSettingsCache {
         // Writer 的原子提交成功以后才发布；不保留调用者的可变 JSONObject。
         snapshot=candidate;modified=file.lastModified();length=file.isFile()?file.length():-1;
         parsed=candidateParsed;
-        checked=loaded=clock.millis();failed=false;
+        checked=loaded=clock.millis();lastError=null;
     }
 }

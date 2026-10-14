@@ -49,6 +49,26 @@ class AudioTransportTests(unittest.TestCase):
         cache['too_large'] = b'1234567'
         self.assertEqual(list(cache), ['large'])
 
+    def test_cache_accounting_across_mapping_mutations(self):
+        cache = AudioCache(max_entries=3, max_bytes=8)
+        def check():
+            self.assertEqual(cache.current_bytes, sum(map(len, cache.values())))
+        cache.update(a=b'12', b=b'345'); check()
+        cache['a'] = b'1'; check()
+        cache.setdefault('c', b'67'); check()
+        cache.setdefault('c', b'ignored'); check()
+        cache |= {'d': b'89'}; check()
+        cache.pop('c'); check()
+        cache.pop('missing', b'default'); check()
+        cache.popitem(last=False); check()
+        del cache['d']; check()
+        with self.assertRaises(KeyError):
+            del cache['missing']
+        check()
+        cache['mutable'] = bytearray(b'12'); check()
+        cache.clear(); check()
+        self.assertEqual(cache.current_bytes, 0)
+
 
 class GatewayPerformanceTests(unittest.IsolatedAsyncioTestCase):
     # 复用已验证 HTTP/WS fixture，测试方法独立，避免重复跑整套基类测试。

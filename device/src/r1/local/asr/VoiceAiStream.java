@@ -299,7 +299,7 @@ public final class VoiceAiStream {
     private static boolean filler(String text) {
         String clean=text.replaceAll("[\\s，。！？、,.!?；;]","");
         return clean.matches("(好的|好|可以|没问题|当然可以)?(我来|让我|下面我来|这就)?"+
-                "(为你|帮你)?(解释|介绍|说明|回答)?(一下|这个问题)?");
+                "(为你|为您|帮你|帮您)?(解释|介绍|说明|回答|解答)?(一下|这个问题)?");
     }
 
     private static boolean current(Reply reply) {

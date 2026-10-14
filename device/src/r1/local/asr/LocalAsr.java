@@ -319,6 +319,7 @@ public final class LocalAsr {
         final String url;
         final boolean pcm16;
         final int channels;
+        final String channelMix;
         final boolean captureAudio;
         final MusicListenMute.Lease musicMute;
         final int turn;
@@ -351,6 +352,8 @@ public final class LocalAsr {
             url = AsrAudio.transportUrl(configured);
             pcm16 = AsrAudio.isGateway(url);
             channels = settings.optInt("channels", 1) == 2 ? 2 : 1;
+            // 旧固件的第二轨可能是参考音频；已有配置保持主麦，平均由网页显式选择。
+            channelMix = settings.optString("asr_channel_mix","left");
             captureAudio = "voice".equals(mode) && settings.optBoolean("capture_next", false);
             CloudVoiceSettings.asrServer(url);
             watchdogMilliseconds = Math.max(20,Math.min(120,settings.optInt("session_timeout_seconds",45)))*1000;
@@ -525,7 +528,7 @@ public final class LocalAsr {
         }
 
         private byte[] encode(byte[] pcm, int count, int channels) {
-            byte[] mono = AsrAudio.mono(pcm,count,channels);
+            byte[] mono = AsrAudio.mono(pcm,count,channels,channelMix);
             for (int at=0;at<mono.length;at+=2) {
                 short sample = (short)((mono[at] & 255) | (mono[at + 1] << 8));
                 peak = Math.max(peak,Math.abs((int)sample));

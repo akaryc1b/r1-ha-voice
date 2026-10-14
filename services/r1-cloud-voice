@@ -11,5 +11,5 @@ start_service() {
     procd_close_instance
 }
 stop_service() {
-    /usr/bin/docker exec r1-apple-music python -c 'import pathlib,os,signal;target=b"/data/r1-cloud-voice/voice_gateway.py";[(os.kill(int(p.name),signal.SIGTERM)) for p in pathlib.Path("/proc").iterdir() if p.name.isdigit() and target in (p/"cmdline").read_bytes().split(b"\0")]'
+    /usr/bin/docker exec r1-apple-music python /data/r1-cloud-voice/stop_gateway.py
 }

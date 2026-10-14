@@ -118,6 +118,8 @@ async function cvLoad(){
   document.getElementById('cv-gateway-url').value=d.gateway_url;
   document.getElementById('cv-local-server').value=d.local_server;
   document.getElementById('cv-session-timeout').value=d.session_timeout_seconds;
+  document.getElementById('cv-channels').value=d.channels||1;
+  document.getElementById('cv-channel-mix').value=d.asr_channel_mix||'left';
   document.getElementById('cv-music-route').value=d.music_route||'ha';
   document.getElementById('cv-music-ack').checked=!!d.music_ack;
   document.getElementById('cv-listen-music-mute').checked=d.listen_music_mute!==false;
@@ -162,7 +164,8 @@ async function cvSave(b){
    listen_music_mute:document.getElementById('cv-listen-music-mute').checked,
     asr_retry_once:document.getElementById('cv-asr-retry-once').checked,
     ai_streaming:document.getElementById('cv-ai-streaming').checked,
-   speech_stream:Number(document.getElementById('cv-speech-stream').value),...ai,...cvConnectionValues()});
+   speech_stream:Number(document.getElementById('cv-speech-stream').value),
+   channels:Number(document.getElementById('cv-channels').value),asr_channel_mix:document.getElementById('cv-channel-mix').value,...ai,...cvConnectionValues()});
   await cvFetch('/voice_volume?target=speech&operation=set&percent='+document.getElementById('cv-speech-volume').value);
   await cvLoadVolume('speech');cvStatus('已保存，下次识别和播报生效');
  }catch(e){cvStatus(e.message);}finally{cvUpdateReady();}

@@ -45,13 +45,32 @@ public class VoiceSettingsCacheTest {
         System.out.println("PASS same-size coarse-mtime edit eventually reloads");
 
         Files.write(file.toPath(),"{invalid".getBytes("UTF-8"));file.stamp++;clock.now=32003;
-        rejected=false;try{cache.read();}catch(IOException error){rejected=true;}
-        check(rejected);stats=file.stats;
-        try{cache.read();}catch(IOException expected){}
-        check(file.stats==stats);
+        check(cache.read().getInt("value")==4);stats=file.stats;loads=cache.loadCount();
+        for(int i=0;i<100;i++)check(cache.getInt("value",0)==4);
+        check(file.stats==stats&&cache.loadCount()==loads);
         Files.write(file.toPath(),new JSONObject().put("value",5).toString().getBytes("UTF-8"));file.stamp++;clock.now=33004;
         check(cache.read().getInt("value")==5);
-        System.out.println("PASS invalid external JSON fails closed and throttles reloads");
+        System.out.println("PASS invalid refresh retains valid snapshot, throttles retries and recovers");
+
+        Files.delete(file.toPath());clock.now+=1001;
+        check(cache.getInt("value",0)==5);
+        Files.write(file.toPath(),new byte[16385]);clock.now+=1001;
+        check(cache.getInt("value",0)==5);
+        Files.write(file.toPath(),new JSONObject().put("value",7).toString().getBytes("UTF-8"));clock.now+=1001;
+        check(cache.getInt("value",0)==7);
+        System.out.println("PASS disappearing or oversized file cannot discard last valid settings");
+
+        FileStats invalid=new FileStats(dir.resolve("invalid.json"));
+        Files.write(invalid.toPath(),"{invalid".getBytes("UTF-8"));
+        VoiceSettingsCache cold=new VoiceSettingsCache(invalid,clock,1000,30000);
+        for(int i=0;i<2;i++){
+            rejected=false;
+            try{cold.read();}catch(IOException error){rejected=error.getCause()!=null;}
+            check(rejected);
+        }
+        Files.write(invalid.toPath(),new JSONObject().put("value",8).toString().getBytes("UTF-8"));clock.now+=1001;
+        check(cold.getInt("value",0)==8);
+        System.out.println("PASS cold failure preserves original cause and subsequently recovers");
 
         FileStats missing=new FileStats(dir.resolve("missing.json"));
         VoiceSettingsCache absent=new VoiceSettingsCache(missing,clock,1000,30000);
@@ -60,7 +79,7 @@ public class VoiceSettingsCacheTest {
         check(absent.read().getInt("value")==6);
         System.out.println("PASS initially missing file can appear later");
 
-        Files.delete(file.toPath());Files.delete(missing.toPath());Files.delete(dir);
-        System.out.println("7 settings cache lifecycle tests passed");
+        Files.delete(file.toPath());Files.delete(missing.toPath());Files.delete(invalid.toPath());Files.delete(dir);
+        System.out.println("9 settings cache lifecycle tests passed");
     }
 }

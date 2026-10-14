@@ -45,4 +45,4 @@ python tools/flash_r1.py --serial 你的R1地址:5555 --apply
 
 网页源文件在 `device/web/`。`VoiceConfigPage.java` 由生成器生成。意图规则源在 `gateway/intent-rules.json`，音乐核心表由 HA 句式生成，再通过 `tools/generate_intent_rules.py` 编入 Java；不维护第二套正则。
 
-本轮重构未自动安装到用户设备。完整检查入口和报告位置见 [TESTING.md](TESTING.md)。
+构建本身不会安装到设备；覆盖安装需另行执行。完整检查入口和报告位置见 [TESTING.md](TESTING.md)。

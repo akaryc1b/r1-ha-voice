@@ -5,6 +5,7 @@
   "local_server": "ws://192.168.1.88:16066",
   "session_timeout_seconds": 45,
   "channels": 1,
+  "asr_channel_mix": "left",
   "cloud_tts": false,
   "cloud_voice": "anna",
   "music_route": "direct",

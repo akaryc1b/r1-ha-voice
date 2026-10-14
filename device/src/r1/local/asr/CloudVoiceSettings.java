@@ -91,6 +91,17 @@ public final class CloudVoiceSettings {
             throw new IllegalArgumentException("无效的语音设置");
         JSONObject settings = read();
         connectionValues(settings,values);
+        if (values.containsKey("channels")) {
+            int channels=Integer.parseInt(values.get("channels"));
+            if (channels!=1 && channels!=2) throw new IllegalArgumentException("麦克风输入需为单声道或双声道");
+            settings.put("channels",channels);
+        }
+        if (values.containsKey("asr_channel_mix")) {
+            String mix=values.get("asr_channel_mix");
+            if (!("mix".equals(mix) || "left".equals(mix) || "right".equals(mix)))
+                throw new IllegalArgumentException("无效的麦克风声道选择");
+            settings.put("asr_channel_mix",mix);
+        }
         settings.put("enabled",true);
         String server = "local".equals(asr) ?
                 settings.optString("local_server","ws://192.168.1.88:16066") :
@@ -147,6 +158,8 @@ public final class CloudVoiceSettings {
         result.put("gateway_url",gatewayUrl(settings));
         result.put("local_server",settings.optString("local_server","ws://192.168.1.88:16066"));
         result.put("session_timeout_seconds",settings.optInt("session_timeout_seconds",45));
+        result.put("channels",settings.optInt("channels",1));
+        result.put("asr_channel_mix",settings.optString("asr_channel_mix","left"));
         result.put("tts",settings.optBoolean("cloud_tts",false) ? "cosy" : "original");
         result.put("voice",settings.optString("cloud_voice","anna"));
         result.put("music_route",settings.optString("music_route","ha"));

@@ -494,7 +494,7 @@ async def health(request):
     config=SETTINGS.snapshot()
     return web.json_response({'ready':True,'asr':config['asr_model'],'asr_models':ASR_PRESETS,
         'custom_asr_models':True,'tts':config['tts_model'],'fallback':'retry-required',
-        'endpoint_silence_seconds':1.3,'cache_entries':len(CACHE),
+        'endpoint_silence_seconds':1.3,'cache_entries':len(CACHE),'cache_bytes':CACHE.current_bytes,
         'music_last_error':request.app.get('music_last_error',''),
         'fast_local_controls':config['local_first'],'complex_asr_timeout_seconds':config['asr_timeout_seconds'],
         'restart_required':SETTINGS.public()['restart_required']})

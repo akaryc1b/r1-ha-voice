@@ -30,12 +30,26 @@ public final class AsrAudio {
     }
 
     public static byte[] mono(byte[] pcm,int count,int channels) {
+        return mono(pcm,count,channels,"mix");
+    }
+
+    public static byte[] mono(byte[] pcm,int count,int channels,String mode) {
         if ((channels!=1 && channels!=2) || count<0 || count>pcm.length || count%(channels*2)!=0)
             throw new IllegalArgumentException("PCM frame alignment invalid");
+        if (!("mix".equals(mode) || "left".equals(mode) || "right".equals(mode)))
+            throw new IllegalArgumentException("PCM channel selection invalid");
         if (channels==1) return Arrays.copyOf(pcm,count);
+        int selected="left".equals(mode)?0:"right".equals(mode)?2:-1;
         byte[] result=new byte[count/2];
         for(int source=0,target=0;source<count;source+=4,target+=2) {
-            result[target]=pcm[source];result[target+1]=pcm[source+1];
+            if (selected>=0) {
+                result[target]=pcm[source+selected];result[target+1]=pcm[source+selected+1];
+                continue;
+            }
+            int left=(short)((pcm[source]&255)|(pcm[source+1]<<8));
+            int right=(short)((pcm[source+2]&255)|(pcm[source+3]<<8));
+            int sample=(left+right)>>1;
+            result[target]=(byte)sample;result[target+1]=(byte)(sample>>8);
         }
         return result;
     }
