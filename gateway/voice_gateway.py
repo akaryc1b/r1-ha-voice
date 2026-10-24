@@ -3,7 +3,7 @@ import asyncio,json,logging,time,re
 from pathlib import Path
 from urllib.parse import urlsplit
 import aiohttp
-from gateway_config import GatewayConfig,ASR_PRESETS,model_id
+from gateway_config import GatewayConfig,ASR_PRESETS,model_id,client_allowed
 from event_log import EventLog,encode_json,MAX_HTTP_BYTES
 from audio_transport import wav_bytes,sample_width,sherpa_frame
 from tts_cache import AudioCache
@@ -112,7 +112,7 @@ async def cleanup(app):
         finally:await app['event_log'].close()
 @web.middleware
 async def local_only(request,handler):
-    if request.remote not in SETTINGS.snapshot()['allowed_clients']:
+    if not client_allowed(request.remote,SETTINGS.snapshot()['allowed_clients']):
         raise web.HTTPForbidden()
     if request.method=='POST' and request.path in {'/config','/asr/test','/logs/config','/logs/clear','/logs/events'}:
         origin=request.headers.get('Origin')

@@ -4,6 +4,7 @@ import json
 import math
 import os
 import re
+from ipaddress import ip_address, ip_network
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -52,6 +53,25 @@ NUMBERS = {
 INTEGERS = {"local_max_chars", "max_record_seconds", "bind_port"}
 URL_FIELDS = {"asr_base_url", "tts_base_url", "local_asr_url", "ma_url", "r1_control_url"}
 ASR_PRESETS = ["TeleAI/TeleSpeechASR", "FunAudioLLM/SenseVoiceSmall", "XingChenAGI/XingChenGSR-V1.0"]
+
+
+def client_allowed(remote, clients):
+    """按真实连接地址匹配单个 IP 或 CIDR；不使用代理请求头授予权限。"""
+    try:
+        address = ip_address(remote)
+    except (ValueError, TypeError):
+        return False
+    for entry in clients:
+        try:
+            network = ip_network(entry, strict=False)
+        except (ValueError, TypeError):
+            continue
+        candidate = address
+        if address.version == 6 and network.version == 4 and address.ipv4_mapped:
+            candidate = address.ipv4_mapped
+        if candidate in network:
+            return True
+    return False
 
 
 def model_id(value, optional=False):
@@ -117,6 +137,11 @@ def validate(values):
     if (not isinstance(clients, list) or not clients or len(clients) > 32
             or any(not isinstance(v, str) or not v or len(v) > 128 for v in clients)):
         raise ValueError("allowed_clients 必须是非空地址列表")
+    for client in clients:
+        try:
+            ip_network(client, strict=False)
+        except ValueError:
+            raise ValueError("allowed_clients 需填写 IP 地址或 CIDR 网段") from None
     if "127.0.0.1" not in clients:
         raise ValueError("allowed_clients 需要保留 127.0.0.1")
     if result["tts_first_chunk_timeout_seconds"] > result["tts_timeout_seconds"]:

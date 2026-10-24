@@ -121,6 +121,8 @@ docker exec r1-apple-music python -u /data/r1-cloud-voice/voice_gateway.py
 
 网关默认 N1 192.168.1.88:16068。更换 IP 时更新 gateway.private.json 的 bind_host、allowed_clients、r1_control_url，并在 R1 8080 更新网关/离线识别地址。改模型无需重启；改监听地址需重启服务。
 
+`allowed_clients` 可以使用家庭网段，例如 `["127.0.0.1", "192.168.1.0/24"]`，避免音箱 DHCP 地址变化后被语音网关拒绝。音箱控制地址和 HA／MA 中的设备链接仍需保持正确；可在主路由为音箱的 MAC 设置 DHCP 地址保留。
+
 ## 4. Apple Music 和播放输出
 
 打开 MA 8095，添加 Apple Music 并完成订阅账号授权，创建 MA 访问令牌。
