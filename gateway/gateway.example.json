@@ -6,6 +6,8 @@
   "asr_fallback_model": "FunAudioLLM/SenseVoiceSmall",
   "asr_fallback_timeout_seconds": 2,
   "local_first": false,
+  "suppress_noise_only": true,
+  "max_compound_steps": 4,
   "local_max_chars": 12,
   "local_asr_url": "http://127.0.0.1:16066",
   "max_record_seconds": 18,

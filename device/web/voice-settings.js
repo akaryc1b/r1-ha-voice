@@ -3,10 +3,11 @@
 let cvDeviceReady=false,cvGatewayReady=false,cvVolumesReady=false;
 const cvVoiceFields=['asr_base_url','asr_model','asr_api_key','asr_timeout_seconds','asr_fallback_model',
  'asr_fallback_timeout_seconds','local_first','local_max_chars','local_asr_url','max_record_seconds',
- 'tts_base_url','tts_model','tts_voice','tts_api_key','tts_timeout_seconds','tts_first_chunk_timeout_seconds','tts_speed','tts_gain'];
+ 'tts_base_url','tts_model','tts_voice','tts_api_key','tts_timeout_seconds','tts_first_chunk_timeout_seconds','tts_speed','tts_gain',
+ 'max_compound_steps','suppress_noise_only'];
 const cvMusicFields=['ma_url','ma_queue_id','ma_token','default_random_query','default_random_providers'];
 const cvNumbers=new Set(['asr_timeout_seconds','asr_fallback_timeout_seconds','local_max_chars','max_record_seconds',
- 'tts_timeout_seconds','tts_first_chunk_timeout_seconds','tts_speed','tts_gain']);
+ 'tts_timeout_seconds','tts_first_chunk_timeout_seconds','tts_speed','tts_gain','max_compound_steps']);
 const cvSecrets={asr_api_key:'asr',tts_api_key:'tts',ma_token:'ma'};
 // 预置 ID 仅用于已知模型，网关仍接收原有 tts_voice 字段。
 const cvTtsVoicePresets={
@@ -124,6 +125,9 @@ async function cvLoad(){
   document.getElementById('cv-music-ack').checked=!!d.music_ack;
   document.getElementById('cv-listen-music-mute').checked=d.listen_music_mute!==false;
   document.getElementById('cv-asr-retry-once').checked=d.asr_retry_once!==false;
+  document.getElementById('cv-followup-enabled').checked=!!d.followup_enabled;
+  document.getElementById('cv-followup-window').value=d.followup_window_seconds||6;
+  document.getElementById('cv-followup-turns').value=d.followup_max_turns||3;
   document.getElementById('cv-ai-streaming').checked=d.ai_streaming!==false;
   document.getElementById('cv-ai-first-content').value=(d.ai_first_content_timeout_ms||4500)/1000;
   document.getElementById('cv-ai-first-reply').value=(d.ai_first_reply_timeout_ms||8000)/1000;
@@ -144,6 +148,7 @@ async function cvSave(b){
    ai_first_reply_timeout_ms:Number(document.getElementById('cv-ai-first-reply').value)*1000,
    ai_answer_timeout_ms:Number(document.getElementById('cv-ai-answer').value)*1000};
   for(let id of ['cv-ai-first-content','cv-ai-first-reply','cv-ai-answer'])if(!document.getElementById(id).checkValidity())throw Error('AI 等待时间超出允许范围');
+  for(let id of ['cv-followup-window','cv-followup-turns'])if(!document.getElementById(id).checkValidity())throw Error('续听设置超出允许范围');
   if(ai.ai_first_content_timeout_ms>ai.ai_first_reply_timeout_ms||ai.ai_first_reply_timeout_ms>ai.ai_answer_timeout_ms)throw Error('AI 超时需满足正文等待 ≤ 首次回答 ≤ 整答');
   let required=Number(document.getElementById('cv-gw-max_record_seconds').value||18)+3;
   if(document.getElementById('cv-asr').value!=='local'){
@@ -163,6 +168,9 @@ async function cvSave(b){
    music_ack:document.getElementById('cv-music-ack').checked,
    listen_music_mute:document.getElementById('cv-listen-music-mute').checked,
     asr_retry_once:document.getElementById('cv-asr-retry-once').checked,
+    followup_enabled:document.getElementById('cv-followup-enabled').checked,
+    followup_window_seconds:Number(document.getElementById('cv-followup-window').value),
+    followup_max_turns:Number(document.getElementById('cv-followup-turns').value),
     ai_streaming:document.getElementById('cv-ai-streaming').checked,
    speech_stream:Number(document.getElementById('cv-speech-stream').value),
    channels:Number(document.getElementById('cv-channels').value),asr_channel_mix:document.getElementById('cv-channel-mix').value,...ai,...cvConnectionValues()});

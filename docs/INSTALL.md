@@ -95,6 +95,7 @@ gateway/event_log.py
 gateway/audio_transport.py
 gateway/tts_cache.py
 gateway/intent_rules.py
+gateway/command_plan.py
 gateway/intent-rules.json
 gateway/music-commands.json
 gateway/command-pause-16k.wav

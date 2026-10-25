@@ -16,6 +16,8 @@ DEFAULTS = {
     "asr_fallback_model": "FunAudioLLM/SenseVoiceSmall",
     "asr_fallback_timeout_seconds": 2,
     "local_first": False,
+    "suppress_noise_only": True,
+    "max_compound_steps": 4,
     "local_max_chars": 12,
     "local_asr_url": "http://127.0.0.1:16066",
     "max_record_seconds": 18,
@@ -43,6 +45,7 @@ NUMBERS = {
     "asr_timeout_seconds": (1, 30),
     "asr_fallback_timeout_seconds": (1, 20),
     "local_max_chars": (1, 32),
+    "max_compound_steps": (2, 6),
     "max_record_seconds": (3, 30),
     "tts_timeout_seconds": (3, 60),
     "tts_first_chunk_timeout_seconds": (1, 15),
@@ -50,7 +53,7 @@ NUMBERS = {
     "tts_gain": (-10, 10),
     "bind_port": (1024, 65535),
 }
-INTEGERS = {"local_max_chars", "max_record_seconds", "bind_port"}
+INTEGERS = {"local_max_chars", "max_record_seconds", "bind_port", "max_compound_steps"}
 URL_FIELDS = {"asr_base_url", "tts_base_url", "local_asr_url", "ma_url", "r1_control_url"}
 ASR_PRESETS = ["TeleAI/TeleSpeechASR", "FunAudioLLM/SenseVoiceSmall", "XingChenAGI/XingChenGSR-V1.0"]
 
@@ -119,6 +122,8 @@ def validate(values):
         result[field] = int(value) if field in INTEGERS else value
     if type(result["local_first"]) is not bool:
         raise ValueError("local_first 必须是布尔值")
+    if type(result["suppress_noise_only"]) is not bool:
+        raise ValueError("suppress_noise_only 必须是布尔值")
     for field in SECRETS:
         value = result[field]
         if not isinstance(value, str) or len(value) > 4096 or any(ord(c) < 32 for c in value):

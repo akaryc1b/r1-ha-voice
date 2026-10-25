@@ -103,3 +103,8 @@ def is_incomplete_transcription(text):
     clean = re.sub(RULES['incomplete_prefix'], '', trim(text), count=1)
     return (not clean or clean in RULES['incomplete_exact'] or
             bool(re.fullmatch(RULES['incomplete_pattern'], clean)))
+
+
+def is_noise_only(text):
+    clean = re.sub(RULES['compact_pattern'], '', trim(text))
+    return bool(clean and re.fullmatch(RULES['noise_only_pattern'], clean))

@@ -11,6 +11,7 @@ STAGES=(
     ("speech_stream","apply_speech_stream","apply"),
     ("asr_retry","apply_asr_retry_hooks","apply"),
     ("diagnostics","apply_diagnostic_hooks","apply"),
+    ("commands","apply_command_hooks","apply"),
 )
 CHAT="com/phicomm/speaker/device/custom/handler/"
 ENGINE="com/unisound/vui/engine/"
@@ -37,6 +38,8 @@ SITES=(
     ("com/unisound/sdk/BlockingAudioTrack.smali","public waitAndRelease()V",("SpeechRouteVolume;->afterStop(",2),(3,)),
     ("com/phicomm/speaker/device/custom/ha/HomeAssistant.smali","public processCommand(Ljava/lang/String;)Ljava/lang/String;",("VoiceDiagnostics;->haStarted(",1),None),
     ("com/phicomm/speaker/device/custom/ha/HomeAssistant.smali","public processCommand(Ljava/lang/String;)Ljava/lang/String;",("VoiceDiagnostics;->haResponse(",1),None),
+    ("com/phicomm/speaker/device/custom/ha/HomeAssistant.smali","public processCommand(Ljava/lang/String;)Ljava/lang/String;",("VoiceCommands;->process(",1),None),
+    ("com/phicomm/speaker/device/custom/ha/HomeAssistant.smali","public processCommand(Ljava/lang/String;)Ljava/lang/String;",("VoiceCommands;->haResponse(",1),None),
 )
 # 这些挂钩是允许的基础 APK 已有契约；缺失时拒绝，绝不靠旧 smali 缓存补齐。
 BASELINE=(

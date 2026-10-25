@@ -13,7 +13,7 @@ COPY asr/sources.json asr/music-hotwords.txt /opt/r1/asr/
 RUN python /opt/r1/deployment/assets.py runtime --architecture "${TARGETARCH}" --destination /opt/sherpa \
     && LD_LIBRARY_PATH=/opt/sherpa/lib /opt/sherpa/bin/sherpa-onnx-online-websocket-server --help >/dev/null 2>&1
 COPY gateway/voice_gateway.py gateway/gateway_config.py gateway/event_log.py gateway/gateway.example.json gateway/music-commands.json /opt/r1/gateway/
-COPY gateway/audio_transport.py gateway/tts_cache.py gateway/intent_rules.py gateway/intent-rules.json /opt/r1/gateway/
+COPY gateway/audio_transport.py gateway/tts_cache.py gateway/intent_rules.py gateway/intent-rules.json gateway/command_plan.py /opt/r1/gateway/
 COPY gateway/command-pause-16k.wav /opt/r1/gateway/
 RUN mkdir -p /data /models && chown 1000:1000 /data /models
 USER 1000:1000

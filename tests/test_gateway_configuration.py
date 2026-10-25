@@ -58,6 +58,7 @@ class GatewayConfigurationTests(unittest.IsolatedAsyncioTestCase):
         application.router.add_get("/tts", gateway.tts)
         application.router.add_get("/models", gateway.asr_models)
         application.router.add_post("/music/control", gateway.music_control)
+        application.router.add_post("/commands/plan", gateway.command_plan)
         self.client = TestClient(TestServer(application))
         await self.client.start_server()
 
@@ -103,8 +104,8 @@ class GatewayConfigurationTests(unittest.IsolatedAsyncioTestCase):
             return web.json_response({"playlists": self.playlists})
         return web.json_response({})
 
-    async def recognize(self):
-        async with self.client.ws_connect("/asr") as socket:
+    async def recognize(self,path="/asr"):
+        async with self.client.ws_connect(path) as socket:
             await socket.send_bytes(b"\0" * 6400)
             await socket.send_str("Done")
             async for message in socket:
@@ -113,6 +114,27 @@ class GatewayConfigurationTests(unittest.IsolatedAsyncioTestCase):
                     if result.get("is_final"):
                         return result
         self.fail("没有返回最终识别结果")
+
+    async def test_noise_and_followup_are_silent_without_executing(self):
+        self.store.update({'local_first':False})
+        for text,path in [('嗯','/asr'),('啊嗯','/asr'),('歌词里的故事','/asr?followup=1')]:
+            self.cloud_text=text
+            result=await self.recognize(path)
+            self.assertTrue(result['ignored'])
+            self.assertEqual(result['text'],'')
+        self.assertFalse(any(c[0]=='ma' for c in self.calls))
+
+    async def test_compound_plan_in_final_frame_and_preview_have_no_actions(self):
+        self.store.update({'local_first':False})
+        self.cloud_text='暂停然后把音量调到三十'
+        result=await self.recognize()
+        self.assertEqual([s['text'] for s in result['command_plan']['steps']],['暂停','把音量调到30'])
+        response=await self.client.post('/commands/plan',json={'text':self.cloud_text})
+        self.assertEqual((await response.json())['steps'],result['command_plan']['steps'])
+        self.assertFalse(any(c[0]=='ma' for c in self.calls))
+        for patch in ({'max_compound_steps':True},{'max_compound_steps':7},{'suppress_noise_only':'yes'}):
+            response=await self.client.post('/config',json=patch)
+            self.assertEqual(response.status,400)
 
     async def test_secrets_not_returned_and_blank_preserves(self):
         response = await self.client.get("/config")

@@ -6,7 +6,7 @@ import org.json.JSONObject;
 /** 使用本地网关复用 MA 控制 API；未匹配的指令交回现有 HA。 */
 public final class MusicRoute {
     public static boolean isCandidate(String text) {
-        return SharedIntentRules.isMusicCandidate(text);
+        return !VoiceCommands.hasPlan(text) && SharedIntentRules.isMusicCandidate(text);
     }
 
     public static boolean isDirectMusic(String text) {

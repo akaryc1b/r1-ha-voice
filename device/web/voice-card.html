@@ -18,6 +18,15 @@
 </div>
 <div class="form-item"><label><input id="cv-listen-music-mute" type="checkbox">收音时临时静音音乐</label><p class="cv-help">降低音箱自己的音乐对识别的干扰。收音结束恢复音乐声音，保留原音量和原有静音；助手播报音量不受影响。</p></div>
 <div class="form-item"><label><input id="cv-asr-retry-once" type="checkbox">没听清时，提示说完后自动再听一次</label><p class="cv-help">提示结束后可直接重说，无需再次唤醒。仅续听一次；网络故障不会反复收音，续听最多等待15秒。</p></div>
+<details class="cv-advanced"><summary>多指令与连续对话</summary>
+<p class="cv-help">网关识别模式支持“先暂停，然后把音量调到三十”等组合控制，按顺序执行；某一步失败就停止后续步骤。普通问答仍交给 AI。含连接词的歌名请用书名号。</p>
+<div class="form-item"><label for="cv-gw-max_compound_steps">一句话最多操作数</label><input id="cv-gw-max_compound_steps" type="number" min="2" max="6" step="1"></div>
+<div class="form-item"><label><input id="cv-followup-enabled" type="checkbox">回复后短时续听，无需再次唤醒</label></div>
+<div class="form-item"><label for="cv-followup-window">续听窗口（秒）</label><input id="cv-followup-window" type="number" min="3" max="10" step="1"></div>
+<div class="form-item"><label for="cv-followup-turns">最多连续追加轮数</label><input id="cv-followup-turns" type="number" min="1" max="5" step="1"></div>
+<p class="cv-help">仅网关模式可用。回复结束后开放续听；无有效新指令就静默退出。续听不会把音乐静音，放歌时可能受音乐干扰。初次开启请现场试用。</p>
+<div class="form-item"><label><input id="cv-gw-suppress_noise_only" type="checkbox">忽略只有“嗯、啊”等语气词的识别结果</label></div>
+</details>
 <details class="cv-advanced"><summary>麦克风声道</summary>
 <div class="form-item"><label for="cv-channels">固件提供的输入格式</label><select id="cv-channels"><option value="1">单声道</option><option value="2">双声道</option></select></div>
 <div class="form-item"><label for="cv-channel-mix">双声道取音方式</label><select id="cv-channel-mix"><option value="left">左声道（保持原有方式）</option><option value="right">右声道</option><option value="mix">左右平均</option></select></div>

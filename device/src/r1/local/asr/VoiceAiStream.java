@@ -312,6 +312,7 @@ public final class VoiceAiStream {
         startNext(reply);
         if (!reply.playing && reply.pending.isEmpty() && reply.waiting && !reply.finished) {
             reply.finished = true;
+            VoiceFollowup.responseEnded(reply.turn);
             MAIN.post(new Runnable() { @Override public void run() {
                 if (!current(reply)) return;
                 try {
@@ -354,6 +355,7 @@ public final class VoiceAiStream {
         if (!reply.pending.isEmpty()) { startNext(reply); return true; }
         if (reply.generating) { reply.waiting = true; return true; }
         reply.finished = true;
+        VoiceFollowup.responseEnded(reply.turn);
         return false;
     }
 
@@ -374,6 +376,12 @@ public final class VoiceAiStream {
         reply.pending.clear();
         if (reply.deadline != null) reply.deadline.cancel();
         disconnectAsync(reply.connection);
+    }
+
+    public static synchronized boolean hasPendingSpeech() {
+        Reply reply=active;
+        return reply!=null && current(reply) && !reply.fallback && !reply.finished &&
+                (reply.generating || reply.playing || !reply.pending.isEmpty());
     }
 
     private static final ConcurrentHashMap<Class<?>,ConcurrentHashMap<MethodKey,Method>> METHODS =

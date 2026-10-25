@@ -14,13 +14,13 @@ PYTHON = sys.executable
 def steps(group):
     unit = lambda directory, pattern: [PYTHON, '-m', 'unittest', 'discover', '-s', directory, '-p', pattern, '-v']
     if group == 'gateway':
-        return [[PYTHON, 'tools/check_repository.py', '--history']] + [unit('tests', pattern) for pattern in ('test_event_log*.py', 'test_gateway*.py', 'test_music_preemption.py', 'test_intent_rules.py')] + [
-            unit('deployment/tests', 'test_*.py'), unit('ma/snapcast/tests', 'test_*.py')]
+        return [[PYTHON, 'tools/check_repository.py', '--history']] + [unit('tests', pattern) for pattern in ('test_event_log*.py', 'test_gateway*.py', 'test_music_preemption.py', 'test_intent_rules.py', 'test_command_plan.py')] + [
+            unit('deployment/tests', 'test_*.py'), unit('ma/snapcast/tests', 'test_*.py'), unit('tests','test_wakeup_config.py')]
     if group == 'java':
         return [[PYTHON, 'tests/ai_stream/' + name] for name in (
             'run_tests.py', 'run_asr_retry_tests.py', 'run_route_volume_tests.py',
             'run_listen_mute_tests.py', 'run_diagnostic_tests.py', 'run_audio_tests.py',
-            'run_settings_cache_tests.py')] + [[PYTHON, 'tools/test_intent_parity.py'], unit('device/tests', 'test_hook_pipeline.py')]
+            'run_settings_cache_tests.py','run_command_tests.py')] + [[PYTHON, 'tools/test_intent_parity.py'], unit('device/tests', 'test_hook_pipeline.py')]
     if group == 'ma':
         target = Path(os.environ.get('R1_MA_SOURCE_ROOT', str(ROOT / '.cache/ma-after')))
         cache = Path(os.environ.get('R1_MA_CACHE_DIR', str(ROOT / '.cache/ma-upstream')))

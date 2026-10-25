@@ -8,6 +8,7 @@ from event_log import EventLog,encode_json,MAX_HTTP_BYTES
 from audio_transport import wav_bytes,sample_width,sherpa_frame
 from tts_cache import AudioCache
 import intent_rules as INTENTS
+import command_plan as COMMAND_PLAN
 from aiohttp import web,WSMsgType
 import numpy as np
 ROOT=Path(__file__).resolve().parent
@@ -198,6 +199,17 @@ async def recognize(request):
                             await ws.send_json({'text':'','is_final':True,'error':ASR_RETRY_MESSAGE if error.retryable else ASR_UNAVAILABLE_MESSAGE,'retryable':error.retryable})
                             await ws.send_str('Done!')
                         return
+                if (config['suppress_noise_only'] and INTENTS.is_noise_only(text) or
+                        request.query.get('followup')=='1' and
+                        not COMMAND_PLAN.is_followup_request(text,config['max_compound_steps'])):
+                    events('INFO',text=text,backend=backend,status='ignored',executed=False,
+                        response='没有有效的新指令，静默结束',
+                        duration_ms=round((time.monotonic()-started)*1000),audio_seconds=size/audio_rate)
+                    if not ws.closed:
+                        await ws.send_json({'text':'','is_final':True,'ignored':True,'backend':backend})
+                        # 正常关闭且不发送 Done!，旧客户端也不会把本地中间结果当成最终指令。
+                        await ws.close(code=1000,message=b'no command')
+                    return
                 if is_incomplete_transcription(text):
                     LOG.info('ASR retry_required reason=incomplete_transcription')
                     events('WARN',text=text,model=primary,backend=backend,error_kind='incomplete_transcription',
@@ -213,7 +225,8 @@ async def recognize(request):
                 events('INFO',text=text,model=actual_model,backend=backend,status='final',
                     duration_ms=round((time.monotonic()-started)*1000),audio_seconds=size/audio_rate)
                 if not ws.closed:
-                    await ws.send_json({'text':text,'is_final':True,'backend':backend})
+                    batch=COMMAND_PLAN.plan(text,config['max_compound_steps'])
+                    await ws.send_json({'text':text,'is_final':True,'backend':backend,'command_plan':batch})
                     await ws.send_str('Done!')
             async def read_local():
                 nonlocal last_local
@@ -494,6 +507,16 @@ async def asr_models(request):
     except (aiohttp.ClientError,asyncio.TimeoutError,RuntimeError,ValueError,TypeError,AttributeError):
         return web.json_response({'error':'无法获取模型列表，可直接填写支持音频转写的模型 ID。'},status=502)
 
+
+async def command_plan(request):
+    try:
+        data=await request.json()
+        if not isinstance(data,dict) or set(data)-{'text'}:
+            raise ValueError('Invalid plan request')
+        return web.json_response(COMMAND_PLAN.plan(data.get('text'),SETTINGS.snapshot()['max_compound_steps']))
+    except (ValueError,TypeError):
+        return web.json_response({'error':'组合指令格式无效。'},status=400)
+
 async def asr_test(request):
     """仅转写随安装包提供的合成录音，不执行识别出的任何指令。"""
     fixture=ROOT/'command-pause-16k.wav'
@@ -557,6 +580,7 @@ app.on_startup.append(startup);app.on_cleanup.append(cleanup)
 app.router.add_get('/config',gateway_config);app.router.add_post('/config',gateway_config)
 app.router.add_get('/models',asr_models);app.router.add_post('/asr/test',asr_test)
 app.router.add_post('/music/control',music_control);app.router.add_get('/asr',recognize);app.router.add_get('/tts',tts);app.router.add_get('/health',health)
+app.router.add_post('/commands/plan',command_plan)
 app.router.add_get('/logs',event_history)
 app.router.add_get('/logs/config',event_history);app.router.add_post('/logs/config',event_history)
 app.router.add_post('/logs/clear',event_history);app.router.add_post('/logs/events',event_history)

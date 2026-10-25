@@ -136,6 +136,7 @@ public final class LocalAsr {
     }
 
     public static void wakeupStarted() {
+        VoiceFollowup.cancel();
         VoiceSession.newTurn();
         Session previous = active;
         active = null;
@@ -149,9 +150,10 @@ public final class LocalAsr {
 
     public static void speechRequested(String text) {
         RETRY.speechRequested(text,SystemClock.elapsedRealtime());
+        VoiceFollowup.speechRequested(text);
     }
 
-    public static void speechError() { RETRY.cancel(); retryOwner = null; }
+    public static void speechError() { RETRY.cancel(); retryOwner = null; VoiceFollowup.cancel(); }
 
     private static void retryAfterSpeech(int event) {
         final long ticket = RETRY.speechEvent(event,VoiceSession.currentTurn(),SystemClock.elapsedRealtime());
@@ -188,6 +190,7 @@ public final class LocalAsr {
     }
 
     public static void speechEvent(int event) {
+        VoiceFollowup.speechEvent(event);
         retryAfterSpeech(event);
         if (event==2106 || event==2107 || event==2111)
             VoiceDiagnostics.record(event==2111?"DEBUG":"INFO","TTS",VoiceSession.currentTurn(),
@@ -228,6 +231,7 @@ public final class LocalAsr {
                 if (!VoiceSession.isCurrent(turn)) return;
                 if (reply==null) dispatchAssistant(owner,text);
                 else if (reply.length()>0) owner.pipeline().playTTS(reply);
+                else VoiceFollowup.responseEnded(turn);
             }});
         }}, "R1MusicControl").start();
     }
@@ -253,6 +257,14 @@ public final class LocalAsr {
         return true;
     }
 
+    public static void startFollowup(int turn) {
+        if(!VoiceSession.isCurrent(turn) || active!=null || engine==null)return;
+        try {
+            if(!AsrAudio.isGateway(CloudVoiceSettings.getString("server","")))return;
+        }catch(Exception ignored){return;}
+        start(engine,"followup");
+    }
+
     public static boolean deferWakeup() { return active != null; }
 
     public static boolean keepMicrophoneOpen(IAudioSource value) {
@@ -268,7 +280,8 @@ public final class LocalAsr {
         Session session = null;
         try {
             JSONObject settings = config();
-            if (!continuation && ("voice".equals(mode) || "sample".equals(mode))) VoiceSession.newTurn();
+            if (!continuation && ("voice".equals(mode) || "followup".equals(mode) || "sample".equals(mode))) VoiceSession.newTurn();
+            VoiceFollowup.begin(mode,VoiceSession.currentTurn());
             session = new Session(value, mode, settings,continuation);
             if (session.captureAudio) {
                 CloudVoiceSettings.consumeCaptureNext();
@@ -278,7 +291,7 @@ public final class LocalAsr {
                 value.doCancelEngine();
                 value.setEngineState(2);
             }
-            if ("voice".equals(mode)) value.pipeline().fireASREvent(1101);
+            if ("voice".equals(mode)||"followup".equals(mode)) value.pipeline().fireASREvent(1101);
             new Thread(session, "r1-local-asr").start();
             Log.i(TAG, "START mode=" + mode);
             VoiceDiagnostics.record("DEBUG","ASR",VoiceSession.currentTurn(),"status","started","operation",mode);
@@ -321,6 +334,8 @@ public final class LocalAsr {
         final int channels;
         final String channelMix;
         final boolean captureAudio;
+        final int followupWindowMilliseconds;
+        volatile boolean ignoredResult;
         final MusicListenMute.Lease musicMute;
         final int turn;
         final boolean retryEnabled;
@@ -349,12 +364,15 @@ public final class LocalAsr {
             retryContinuation = continuation;
             String configured = settings.optString("server", "ws://192.168.1.88:16066");
             CloudVoiceSettings.asrServer(configured);
+            if("followup".equals(mode) && AsrAudio.isGateway(configured))
+                configured+=(configured.indexOf('?')<0?"?":"&")+"followup=1";
             url = AsrAudio.transportUrl(configured);
             pcm16 = AsrAudio.isGateway(url);
             channels = settings.optInt("channels", 1) == 2 ? 2 : 1;
             // 旧固件的第二轨可能是参考音频；已有配置保持主麦，平均由网页显式选择。
             channelMix = settings.optString("asr_channel_mix","left");
             captureAudio = "voice".equals(mode) && settings.optBoolean("capture_next", false);
+            followupWindowMilliseconds=Math.max(3,Math.min(10,settings.optInt("followup_window_seconds",6)))*1000;
             CloudVoiceSettings.asrServer(url);
             watchdogMilliseconds = Math.max(20,Math.min(120,settings.optInt("session_timeout_seconds",45)))*1000;
             if (continuation) watchdogMilliseconds = Math.min(watchdogMilliseconds,15000);
@@ -390,7 +408,7 @@ public final class LocalAsr {
                 VoiceDiagnostics.record(failure.length()>0?"WARN":"INFO","ASR",turn,
                         "text",finalResult && failure.length()==0?result:"", "response",failure,
                         "backend",recognizedBackend,"operation",mode,
-                        "status",failure.length()>0?"failed":"recognized",
+                        "status",ignoredResult?"ignored":failure.length()>0?"failed":"recognized",
                         "duration_ms",SystemClock.elapsedRealtime()-started);
                 Log.i(TAG, "FINISH mode=" + mode + " bytes=" + bytes +
                         " rms=" + (samples == 0 ? 0 : (int)Math.sqrt((double)squares / samples)) +
@@ -405,11 +423,14 @@ public final class LocalAsr {
                         if ("sample".equals(mode) || "verify".equals(mode)) owner.setEngineState(0);
                         owner.pipeline().fireASREvent(1102);
                         if (result.length() > 0 && finalResult && failure.length() == 0 && !"probe".equals(mode) && !"verify".equals(mode)) {
+                            VoiceFollowup.recognized(turn);
                             Log.i(TAG, "DISPATCH text=" + result);
                             dispatch(owner,result);
                         } else if ("voice".equals(mode) && failure.length() > 0) {
                             retryPrompt(Session.this);
                         }
+                        if(ignoredResult || "followup".equals(mode) && failure.length()>0)
+                            VoiceFollowup.cancelTurn(turn);
                         owner.enterWakeup(false);
                     }
                 });
@@ -427,6 +448,10 @@ public final class LocalAsr {
                     try {
                         JSONObject reply = new JSONObject(message);
                         if (reply.has("backend")) recognizedBackend=reply.optString("backend","");
+                        if(reply.optBoolean("ignored",false)) {
+                            recognized="";ignoredResult=true;finalResult=true;stop=true;
+                            finished.countDown();return;
+                        }
                         if (reply.optString("error", "").length() > 0) {
                             failure = AsrRetryOnce.PROMPT.equals(reply.optString("error","")) ?
                                     AsrRetryOnce.PROMPT : "语音识别服务暂时没有响应，请稍后再试。";
@@ -438,6 +463,7 @@ public final class LocalAsr {
                         String text = reply.optString("text", "").trim();
                         if (text.length() > 0) recognized = text;
                         if (reply.optBoolean("is_final", false) && text.length() > 0) {
+                            VoiceCommands.offer(turn,normalize(text),reply.optJSONObject("command_plan"));
                             finalResult = true;
                             stop = true;
                             finished.countDown();
@@ -467,6 +493,9 @@ public final class LocalAsr {
             Log.i(TAG, "MIC_OPEN source=existing-recording-stream channels=" + channels + " setup_ms=" +
                     (micStarted - started));
             while (!stop) {
+                // 窗口限制等人开口的时间；已有中间文字后让端点服务判断句尾，避免截断长指令。
+                if("followup".equals(mode) && FollowupWindow.listeningExpired(
+                        SystemClock.elapsedRealtime()-micStarted,followupWindowMilliseconds,recognized.length()>0))break;
                 byte[] pcm = frames.poll(250, TimeUnit.MILLISECONDS);
                 if (pcm == null) {
                     if (SystemClock.elapsedRealtime() - micStarted > 5000 && bytes == 0)
@@ -486,7 +515,7 @@ public final class LocalAsr {
                 }
                 long elapsed = SystemClock.elapsedRealtime() - micStarted;
                 if ("probe".equals(mode) && SystemClock.elapsedRealtime() - micStarted >= 3000) break;
-                if (!"probe".equals(mode) && recognized.length() == 0 && elapsed > 6500) {
+                if (!"probe".equals(mode) && !"followup".equals(mode) && recognized.length() == 0 && elapsed > 6500) {
                     stop = true; break;
                 }
             }

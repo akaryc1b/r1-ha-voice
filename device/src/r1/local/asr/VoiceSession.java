@@ -24,6 +24,7 @@ public final class VoiceSession {
     }
 
     public static boolean isHomeRequest(String text) {
+        if(VoiceCommands.hasPlan(text))return true;
         if (SharedIntentRules.isExplanationQuestion(text)) {
             android.util.Log.i("R1VoiceRoute","AI_EXPLANATION");return false;
         }

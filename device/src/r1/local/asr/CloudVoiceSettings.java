@@ -131,6 +131,20 @@ public final class CloudVoiceSettings {
                 throw new IllegalArgumentException("AI 流式播报设置需为开或关");
             settings.put("ai_streaming","true".equals(streaming));
         }
+        if(values.containsKey("followup_enabled")) {
+            String enabled=values.get("followup_enabled");
+            if(!("true".equals(enabled)||"false".equals(enabled)))
+                throw new IllegalArgumentException("连续对话需为开或关");
+            settings.put("followup_enabled","true".equals(enabled));
+        }
+        String[] followupKeys={"followup_window_seconds","followup_max_turns"};
+        int[] followupMin={3,1},followupMax={10,5};
+        for(int i=0;i<followupKeys.length;i++)if(values.containsKey(followupKeys[i])) {
+            int number=Integer.parseInt(values.get(followupKeys[i]));
+            if(number<followupMin[i]||number>followupMax[i])
+                throw new IllegalArgumentException("连续对话时长需为3～10秒，轮数需为1～5轮");
+            settings.put(followupKeys[i],number);
+        }
         String[] budgets = {"ai_first_content_timeout_ms","ai_first_reply_timeout_ms","ai_answer_timeout_ms"};
         int[] defaults = {4500,8000,30000};
         int[] limits = {30000,60000,120000};
@@ -166,6 +180,9 @@ public final class CloudVoiceSettings {
         result.put("music_ack",settings.optBoolean("music_ack",false));
         result.put("listen_music_mute",settings.optBoolean("listen_music_mute",true));
         result.put("asr_retry_once",settings.optBoolean("asr_retry_once",true));
+        result.put("followup_enabled",settings.optBoolean("followup_enabled",false));
+        result.put("followup_window_seconds",settings.optInt("followup_window_seconds",6));
+        result.put("followup_max_turns",settings.optInt("followup_max_turns",3));
         result.put("ai_streaming",settings.optBoolean("ai_streaming",true));
         result.put("ai_first_content_timeout_ms",settings.optInt("ai_first_content_timeout_ms",4500));
         result.put("ai_first_reply_timeout_ms",settings.optInt("ai_first_reply_timeout_ms",8000));

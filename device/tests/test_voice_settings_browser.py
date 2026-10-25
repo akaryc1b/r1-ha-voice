@@ -48,9 +48,17 @@ with sync_playwright() as playwright:
       const get=id=>document.getElementById(id);
       if(get('cv-channels').value!=='2'||get('cv-channel-mix').value!=='left')throw Error('existing microphone selection');
       get('cv-channel-mix').value='mix';
+      get('cv-followup-enabled').checked=true;
+      get('cv-followup-window').value='6';
+      get('cv-followup-turns').value='3';
+      get('cv-gw-max_compound_steps').value='4';
+      get('cv-gw-suppress_noise_only').checked=true;
       await cvSave(get('cv-save-voice'));
       const audioPatch=window.saved.filter(row=>row.path==='/voice_config').at(-1).patch;
       if(audioPatch.channels!==2||audioPatch.asr_channel_mix!=='mix')throw Error('microphone selection saved');
+      if(!audioPatch.followup_enabled||audioPatch.followup_window_seconds!==6||audioPatch.followup_max_turns!==3)throw Error('followup saved');
+      const routePatch=window.saved.filter(row=>row.path==='/voice_gateway_config').at(-1).patch;
+      if(routePatch.max_compound_steps!==4||!routePatch.suppress_noise_only)throw Error('compound settings saved');
       const choice=get('cv-tts-voice-choice'),voice=get('cv-gw-tts_voice');
       if(choice.options.length!==9||choice.value!=='FunAudioLLM/CosyVoice2-0.5B:anna')throw Error('preset load');
       choice.value='FunAudioLLM/CosyVoice2-0.5B:claire';cvTtsVoiceChanged();
