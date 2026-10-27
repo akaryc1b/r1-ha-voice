@@ -163,6 +163,14 @@ MA 环境变量 `R1_APPLE_SEQUENTIAL_SEEK_MAX_SECONDS` 控制 Apple 加密 MP4 �
 
 `R1_IDLE_DETAILS_REFRESH` 默认 `1`：待机时在当前歌曲播放详情过期前 30 秒刷新；Apple 默认有效期 600 秒，正常情况下约每 9.5 分钟请求一次资料，不播放音频。每次重新检查队列、曲目和会话，播放中不继续周期刷新。设为 `0` 关闭周期刷新，保留启动预取。修改后重启 MA；不能保证外网持续故障时仍能立即播放。
 
+### Snapcast 播放中短断声
+
+播放中短暂断声应同时检查接收器缺帧、时钟重同步和收音静音，不能只看 MA 的 playing 或 Android 的零欠载。Snapclient 在取不到完整音频帧时可能向输出填静音，见[固定版本接收器源码](https://github.com/badaix/snapcast/blob/v0.29.0/client/stream.cpp)。
+
+若已确认接收器缺帧，可单独给该音箱增加小幅缓冲余量。Snapcast 客户端 `latency` 是补偿值：[实际目标为服务器缓冲减去客户端 latency](https://github.com/badaix/snapcast/blob/v0.29.0/client/controller.cpp)。例如服务器500ms、客户端-200ms，对应约700ms播放目标，只增加0.2秒，不改变音频格式或音量。2026-10-27 本机使用这个值做对照，后台缺帧从30秒12次降为后续两个观察窗口均为0，听感还需现场确认。
+
+使用 Snapcast 的 `Client.SetLatency` JSON RPC，参数为该音箱真实 `id` 和 `latency`。先保存原值，观察无改善时只恢复这个字段；不要恢复整份旧客户端快照，以免覆盖用户后来调整的音量。配置由 Snapserver 持久化至自身数据目录的 `server.json`。这项设置不在8080语音模型选项中，也不应修改其它音箱的偏移。
+
 分类、请求前后缀、同音修正和中文音量数字规则只维护 gateway/intent-rules.json，由生成器编入Java，Python读取同一份JSON。改规则需重启网关并重建客户端；日常改ASR/TTS模型仍只需网页保存。中文数字只在完整音量请求中转成0到100的数字，歌名和普通问答不做数字替换；HA也拒绝无法识别或越界的值，不再静默转为0。
 
 新客户端访问网关/asr时显式使用audio_format=pcm_s16le，16kHz单声道PCM16小端；网关仍接受旧客户端默认Float32。离线直连Sherpa继续使用Float32。不要在PCM16客户端连接旧网关前先单独升级客户端。
